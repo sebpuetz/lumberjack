@@ -10,3 +10,4 @@ repository = "https://github.com/sebpuetz/lumberjack"
 
 
 [dependencies]
+failure = "0.1"
