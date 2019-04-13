@@ -1,0 +1,12 @@
+[package]
+name = "lumberjack-utils"
+version = "0.1.0"
+authors = ["Sebastian Puetz <sebastian.puetz@student.uni-tuebingen.de>"]
+edition = "2018"
+description = "Read and modify constituency trees."
+license = "Apache-2.0"
+homepage = "https://github.com/sebpuetz/lumberjack"
+repository = "https://github.com/sebpuetz/lumberjack"
+
+
+[dependencies]
