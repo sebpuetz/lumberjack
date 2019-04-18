@@ -138,7 +138,7 @@ impl NonTerminal {
 
     /// Return annotation if present.
     pub fn annotation(&self) -> Option<&str> {
-        self.annotation.as_ref().map(|s| s.as_str())
+        self.annotation.as_ref().map(String::as_str)
     }
 
     /// Return old annotation and replace with `annotation`.
@@ -146,7 +146,7 @@ impl NonTerminal {
         where
             S: Into<String>,
     {
-        mem::replace(&mut self.annotation, annotation.map(|s| s.into()))
+        mem::replace(&mut self.annotation, annotation.map(Into::into))
     }
 }
 
@@ -178,7 +178,7 @@ impl NTBuilder {
         where
             S: Into<String>,
     {
-        self.annotation = annotation.map(|s| s.into());
+        self.annotation = annotation.map(Into::into);
         self
     }
 
@@ -265,7 +265,7 @@ impl Terminal {
 
     /// Return lemma if present, else `None`.
     pub fn lemma(&self) -> Option<&str> {
-        self.lemma.as_ref().map(|s| s.as_str())
+        self.lemma.as_ref().map(String::as_str)
     }
 
     /// Replace lemma with `new_lemma`. Return old value.
@@ -273,12 +273,12 @@ impl Terminal {
         where
             S: Into<String>,
     {
-        mem::replace(&mut self.lemma, new_lemma.map(|s| s.into()))
+        mem::replace(&mut self.lemma, new_lemma.map(Into::into))
     }
 
     /// Return morphological features if present, else `None`.
     pub fn morph(&self) -> Option<&str> {
-        self.morph.as_ref().map(|s| s.as_str())
+        self.morph.as_ref().map(String::as_str)
     }
 
     /// Replace morphological features with `new_morph`. Return old value.
@@ -286,7 +286,7 @@ impl Terminal {
         where
             S: Into<String>,
     {
-        mem::replace(&mut self.morph, new_morph.map(|s| s.into()))
+        mem::replace(&mut self.morph, new_morph.map(Into::into))
     }
 }
 

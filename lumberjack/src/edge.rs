@@ -24,7 +24,7 @@ impl Edge {
     where
         S: Into<String>,
     {
-        let new_label = new_label.map(|s| s.into());
+        let new_label = new_label.map(Into::into);
         mem::replace(&mut self.0, new_label)
     }
 }
@@ -34,7 +34,7 @@ where
     S: Into<String>,
 {
     fn from(label: Option<S>) -> Edge {
-        Edge(label.map(|s| s.into()))
+        Edge(label.map(Into::into))
     }
 }
 
