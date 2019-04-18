@@ -10,6 +10,8 @@ pub mod node;
 
 pub mod ptb_reader;
 
+pub mod ptb_writer;
+
 pub mod span;
 
 pub mod tree;
