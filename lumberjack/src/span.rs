@@ -25,6 +25,14 @@ impl Clone for Span {
 }
 
 impl Span {
+    /// Return whether `index` is inside the `Span`.
+    pub fn contains(&self, index: usize) -> bool {
+        match self {
+            Span::Continuous(span) => span.contains(index),
+            Span::Discontinuous(span) => span.contains(index),
+        }
+    }
+
     /// Get this spans lower bounds.
     pub fn lower(&self) -> usize {
         match self {
@@ -117,6 +125,11 @@ impl ContinuousSpan {
         ContinuousSpan { lower, upper }
     }
 
+    /// Return whether `index` is inside the `Span`.
+    pub fn contains(&self, index: usize) -> bool {
+        index < self.upper && index >= self.lower
+    }
+
     /// Get this spans lower bounds.
     pub fn lower(&self) -> usize {
         self.lower
@@ -154,6 +167,11 @@ impl SkipSpan {
         assert_ne!(skip.len(), upper - lower, "Can't skip all indices.");
 
         SkipSpan { lower, upper, skip }
+    }
+
+    /// Return whether `index` is inside the `Span`.
+    pub fn contains(&self, index: usize) -> bool {
+        index < self.upper && index >= self.lower && !self.skip.contains(&index)
     }
 
     /// Get this span's skipped indices.
@@ -254,7 +272,7 @@ impl<'a> Iterator for SpanIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::span::Span;
+    use crate::span::{Span, ContinuousSpan};
     use crate::span::SkipSpan;
     use std::collections::HashSet;
 
@@ -288,6 +306,31 @@ mod tests {
         assert_eq!(span.lower, 0);
         assert_eq!(span.upper, 4);
         assert_eq!(span.into_iter().collect::<Vec<_>>(), vec![0, 3]);
+    }
+
+    #[test]
+    fn contains_skipspan() {
+        let skip = vec![3, 5].into_iter().collect::<HashSet<usize>>();
+        let span = SkipSpan::new(0, 10, skip);
+        assert!(span.contains(0));
+        assert!(span.contains(1));
+        assert!(span.contains(2));
+        assert!(!span.contains(3));
+        assert!(span.contains(4));
+        assert!(!span.contains(5));
+        assert!(span.contains(6));
+        assert!(!span.contains(10));
+    }
+
+    #[test]
+    fn contains_contspan() {
+        let span = ContinuousSpan::new(0, 10);
+        assert!(span.contains(0));
+        assert!(span.contains(1));
+        assert!(span.contains(2));
+        assert!(span.contains(4));
+        assert!(span.contains(6));
+        assert!(!span.contains(10))
     }
 
     #[test]
