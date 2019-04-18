@@ -1,0 +1,637 @@
+%% comments
+%%
+#FORMAT 4
+#BOT ORIGIN
+0	T990507.2
+1	T990507.3
+2	T990507.4
+3	T990507.5
+4	T990507.7
+5	T990507.9
+6	T990507.10
+7	T990507.11
+8	T990507.12
+9	T990507.13
+10	T990507.15
+11	T990507.16
+12	T990507.17
+13	T990507.18
+14	T990507.19
+15	T990507.20
+16	T990507.21
+17	T990507.22
+18	T990507.23
+19	T990507.24
+20	T990507.25
+21	T990507.27
+22	T990507.28
+23	T990507.29
+24	T990507.30
+25	T990507.31
+26	T990507.33
+27	T990507.34
+28	T990507.35
+29	T990507.36
+30	T990507.37
+31	T990507.39
+32	T990507.40
+33	T990507.41
+34	T990507.42
+35	T990507.44
+36	T990507.46
+37	T990507.47
+38	T990507.48
+39	T990507.49
+40	T990507.50
+41	T990507.51
+42	T990507.52
+43	T990507.53
+44	T990507.54
+45	T990507.56
+46	T990507.57
+47	T990507.58
+48	T990507.59
+49	T990507.60
+50	T990507.61
+51	T990507.62
+52	T990507.63
+53	T990507.66
+54	T990507.70
+55	T990507.84
+56	T990507.85
+57	T990507.86
+58	T990507.87
+59	T990507.88
+60	T990507.89
+61	T990507.90
+62	T990507.91
+63	T990507.92
+64	T990507.93
+65	T990507.94
+66	T990507.96
+67	T990507.97
+68	T990507.98
+69	T990507.99
+70	T990507.101
+71	T990507.102
+72	T990507.103
+73	T990507.104
+74	T990507.105
+75	T990507.106
+76	T990507.107
+77	T990507.111
+78	T990507.112
+79	T990507.113
+80	T990507.114
+81	T990507.116
+82	T990507.117
+83	T990507.118
+84	T990507.119
+85	T990507.123
+86	T990507.124
+87	T990507.125
+88	T990507.128
+89	T990507.129
+90	T990507.130
+91	T990507.131
+92	T990507.132
+93	T990507.133
+94	T990507.134
+95	T990507.135
+96	T990507.136
+97	T990507.137
+98	T990507.139
+99	T990507.140
+100	T990507.141
+101	T990507.143
+102	T990507.145
+103	T990507.146
+104	T990507.147
+105	T990507.148
+106	T990507.149
+107	T990507.150
+108	T990507.151
+109	T990507.152
+110	T990507.153
+111	T990507.154
+112	T990507.156
+113	T990507.157
+114	T990507.158
+115	T990507.160
+116	T990507.161
+117	T990507.162
+118	T990507.164
+119	T990507.165
+120	T990507.166
+121	T990507.167
+122	T990507.168
+123	T990507.169
+124	T990507.173
+125	T990507.174
+126	T990507.175
+127	T990507.176
+128	T990507.178
+129	T990507.179
+130	T990507.180
+131	T990507.181
+132	T990507.182
+133	T990507.184
+134	T990507.186
+135	T990507.187
+136	T990507.188
+137	T990507.189
+138	T990507.190
+139	T990507.191
+140	T990507.192
+141	T990507.193
+142	T990507.194
+143	T990507.196
+144	T990507.197
+145	T990507.198
+146	T990507.199
+147	T990507.201
+
+#BOS 1  2 1202391857 0 %% HEADLINE
+V		v		VVFIN	3sit		HD	500
+d			d			ART	nsf		-NE	502
+A			a			NN	nsf		HD	502
+S		s		NN	asn		HD	503
+?			?			$.	--		--	0
+#500			--			VXFIN	--		HD	501
+#501			--			LK	--		-	505
+#502			--			NX=ORG	--		ON	504
+#503			--			NX	--		OA	504
+#504			--			MF	--		-	505
+#505			--			SIMPX	--		--	0
+#EOS 1
+#BOS 2  30 1384191588 0 %% HEADLINE
+S	S	NN	nsf		HD	500
+m			m		VMFIN	3sis		HD	501
+A		a		NN	apn		HD	502
+p			p			VVINF	--		HD	503
+/			/			$(	--		--	0
+F			f			VVFIN	3pit		HD	504
+1			1		CARD	--		HD	505
+Mark			M			NN	npf		HD	515
+S		S		NN	npn		HD	506
+f			f			APPR	a		-	516
+F		F		NN	apn		HD	507
+i			i			APPR	a		-	517
+e		e			ART	asn		-	508
+A		A		NN	asn		HD	508
+i			i			APPR	d		-	518
+D			D			NE	dsn		HD	509
+?			?			$.	--		--	0
+#500			--			NX	--		ON	510
+#501			--			VXFIN	--		HD	511
+#502			--			NX	--		OA	512
+#503			--			VXINF	--		OV	513
+#504			--			VXFIN	--		HD	514
+#505			--			ADJX	--		-	515
+#506			--			NX	--		-	520
+#507			--			NX	--		HD	516
+#508			--			NX	--		HD	517
+#509			--			NX=GPE	--		HD	518
+#510			--			VF	--		-	519
+#511			--			LK	--		-	519
+#512			--			MF	--		-	519
+#513			--			VC	--		-	519
+#514			--			LK	--		-	523
+#515			--			NX	--		HD	520
+#516			--			PX	--		-	521
+#517			--			PX	--		V-MOD	522
+#518			--			PX	--		MOD	522
+#519			--			SIMPX	--		--	0
+#520			--			NX	--		HD	521
+#521			--			NX	--		ON	522
+#522			--			MF	--		-	523
+#523			--			SIMPX	--		--	0
+#EOS 2
+#BOS 3  2 1070544990 0 %% HEADLINE
+L	L	NN	nsf		HD	500
+U			U			NE	nsf		-	501
+W		W		NE	nsf		-	501
+:			:			$.	--		--	0
+E		e			ART	nsm		-	503
+B		B		NN	nsm		HD	503
+#500			--			NX	--		APP	502
+#501			--			NX=PER	--		APP	502
+#502			--			NX	--		--	0
+#503			--			NX	--		--	0
+#EOS 3
+#BOS 4  9 1083155968 0
+I			i			APPRART	dsm		-	501
+J			J			NN	dsm		HD	500
+h		h		VAFIN	3sis		HD	503
+d			d			ART	nsf		-NE	505
+A	a	NN	nsf		HD	505
+B			b			NE	nsn		HD	506
+i			i			PPOSAT	asm		-	509	%% R=anaphoric.4:507
+l		l		ADJA	asm		HD	508
+G		g		NN	asm		HD	509
+H			h			NE	asm		-	510
+T			t			NE	asm		-	510
+f		f		ADJD	--		HD	512
+e		e		VVPP	--		HD	514
+,			,			$,	--		--	0
+n			n			ADV	--		HD	517
+w			w		VAFIN	3sis		HD	519
+a			a			ADV	--		HD	521
+d			d			ART	nsm		-	522
+V		v		NN	nsm		HD	522
+d			d			ART	gsf		-	523
+W	w	NN	gsf		HD	523
+i			i			APPR	a		-	526
+d			d			ART	asm		-	525
+F			f			NN	asm		HD	525
+h		h		VVPP	--		HD	528
+.			.			$.	--		--	0
+#500			--			NX	--		HD	501
+#501			--			PX	--		V-MOD	502
+#502			--			VF	--		-	516
+#503			--			VXFIN	--		HD	504
+#504			--			LK	--		-	516
+#505			--			NX=ORG	--		HD	507
+#506			--			NX=GPE	--		-	507
+#507			--			NX	--		ON	513 %% R=coreferential.1:502
+#508			--			ADJX	--		-	509
+#509			--			NX	--		APP	511
+#510			--			NX=PER	--		APP	511
+#511			--			NX	--		OA	513
+#512			--			ADJX	--		V-MOD	513
+#513			--			MF	--		-	516
+#514			--			VXINF	--		OV	515
+#515			--			VC	--		-	516
+#516			--			SIMPX	--		KONJ	531
+#517			--			ADVX	--		MOD	518
+#518			--			VF	--		-	530
+#519			--			VXFIN	--		HD	520
+#520			--			LK	--		-	530
+#521			--			ADVX	--		MOD	527
+#522			--			NX	--		HD	524
+#523			--			NX	--		-	524
+#524			--			NX	--		ON	527
+#525			--			NX	--		HD	526
+#526			--			PX	--		OPP	527
+#527			--			MF	--		-	530
+#528			--			VXINF	--		OV	529
+#529			--			VC	--		-	530
+#530			--			SIMPX	--		KONJ	531
+#531			--			SIMPX	--		--	0
+#EOS 4
+#BOS 5  5 1121081949 0
+I			i			APPR	d		-	502
+e			e			ART	dsf		-	501
+a		a			ADJA	dsf		HD	500
+A			a			NN	dsf		HD	501
+w			w		VAFIN	3pis		HD	504
+d			d			ART	dsf		-	507
+B			b			ADJA	***		HD	506
+S	s	NN	dsf		HD	507
+D			d			NN	npn		HD	508
+ü			ü			APPR	a		-	512
+d			d			ADJA	apf		HD	509
+f		f		ADJA	apf		HD	510
+T		T		NN	apf		HD	511
+m		m		VVPP	--		HD	515
+.			.			$.	--		--	0
+#500			--			ADJX	--		-	501
+#501			--			NX	--		HD	502
+#502			--			PX	--		V-MOD	503
+#503			--			VF	--		-	517
+#504			--			VXFIN	--		HD	505
+#505			--			LK	--		-	517
+#506			--			ADJX	--		-	507
+#507			--			NX	--		OD	514 %% R=coreferential.2:500
+#508			--			NX	--		HD	513
+#509			--			ADJX	--		-	511
+#510			--			ADJX	--		-	511
+#511			--			NX	--		HD	512
+#512			--			PX	--		-	513
+#513			--			NX	--		ON	514
+#514			--			MF	--		-	517
+#515			--			VXINF	--		OV	516
+#516			--			VC	--		-	517
+#517			--			SIMPX	--		--	0
+#EOS 5
+#BOS 6  2 1432041646 0
+V		v		ADJD	--		HD	500
+,			,			$,	--		--	0
+s			s			ADV	--		HD	501
+d			d			ART	nsn		-	502
+S		S		NN	nsn		HD	502
+e			e			ART	gsf		-	503
+M           m		NN	gsf		HD	503
+d			d			ART	gsf		-NE	504
+A			A			NN	gsf		HD	504
+,			,			$,	--		--	0
+s			s			VAFIN	3sks		HD	505
+d			d			ART	nsf		-	506
+L	L	NN	nsf		HD	506
+U			U			NE	nsf		-	507	%% Ute
+W		W		NE	nsf		-	507
+,			,			$,	--		--	0
+d			d			PRELS	nsf		HD	508
+s			#			PRF	as*3		HD	509
+j			j			ADV	--		HD	510
+a			a			KOKOM	--		-	511
+"			"			$(	--		--	0
+S		S		NN	nsf		HD	511
+"			"			$(	--		--	0
+g			g			VVFIN	3sks		HD	512
+,			,			$,	--		--	0
+"			"			$(	--		--	0
+w			w			PWAV	--		HD	513
+d			d			ADV	--		HD	514
+a			a			PIS	np*		HD	515
+w		w			VVFIN	3pis		HD	516
+,			,			$,	--		--	0
+w			w			PWAV	--		HD	517
+e			e			ADJD	--		HD	531
+s 		s		PPER	nsf3		HD	518
+m			m			APPR	d		-	532
+T			T			NE	dsm		HD	519
+z		z		VVFIN	3sit		HD	520
+"			"			$(	--		--	0
+.			.			$.	--		--	0
+#500			--			ADJX	--		PRED	521
+#501			--			ADVX	--		-	538
+#502			--			NX	--		HD	534
+#503			--			NX	--		HD	522
+#504			--			NX=ORG	--		-	522 %% R=coreferential.4:523
+#505			--			VXFIN	--		HD	523
+#506			--			NX	--		APP	524
+#507			--			NX=PER	--		APP	524
+#508			--			NX	--		ON	525 %% R=anaphoric.6:524
+#509			--			NX	--		OA	526 %% R=inherent_reflexive
+#510			--			ADVX	--		MOD	526
+#511			--			NX	--		PRED	526
+#512			--			VXFIN	--		HD	527
+#513			--			ADVX	--		MOD	528
+#514			--			ADVX	--		MOD	529
+#515			--			NX	--		ON	529
+#516			--			VXFIN	--		HD	530
+#517			--			ADVX	--		-	531
+#518			--			NX	--		ON	537 %% R=anaphoric.6:508
+#519			--			NX=PER	--		HD	532 %% R=coreferential.4:511
+#520			--			VXFIN	--		HD	533
+#521			--			VF	--		-	545
+#522			--			NX	--		-	534
+#523			--			LK	--		-	545
+#524			--			NX	--		ON	535 %% R=coreferential.3:502
+#525			--			C	--		-	543
+#526			--			MF	--		-	543
+#527			--			VC	--		-	543
+#528			--			C	--		-	541
+#529			--			MF	--		-	541
+#530			--			VC	--		-	541
+#531			--			ADJX	--		V-MOD	536
+#532			--			PX	--		OPP	537
+#533			--			VC	--		-	539
+#534			--			NX	--		HD	538
+#535			--			MF	--		-	545
+#536			--			C	--		-	539
+#537			--			MF	--		-	539
+#538			--			NX	--		--	0
+#539			--			SIMPX	--		OS	540
+#540			--			NF	--		-	541
+#541			--			SIMPX	--		MOD	542
+#542			--			NF	--		-	543
+#543			--			R-SIMPX	--		ON-MOD	544
+#544			--			NF	--		-	545
+#545			--			SIMPX	--		--	0
+#EOS 6
+#BOS 7  5 1121081958 0
+V			V			NN	nsm		HD	500
+N			N			NN	nsf		HD	501
+1			1			CARD	--		HD	502
+:			:			$.	--		--	0
+1			1			CARD	--		HD	505
+M			M			NN	npf		HD	506
+a			a			APPR	d		-	515
+d			d			ART	dsf		-	508
+b		b		ADJA	dsf		HD	507
+G		G		NN	dsf		HD	508
+f			f			APPR	a		-	513
+d			d			ART	apn		-	509
+F		F		NN	apn		HD	509
+i			i			APPR	d		-	511
+S		S		NN	dsn		HD	510
+s			s		VAFIN	3pks		HD	518
+ü			ü			APPR	a		-	526
+d 		d			ART	asn		-	520
+K			K			NN	asn		HD	520
+d			d			ART	gsm		-	522
+B			B			ADJA	***		HD	521
+L		L		NN	gsm		HD	522
+d			d			ART	gsf		-NE	523
+A			A			NN	gsf		HD	523
+a			a			APPR	a		-	531
+d			d			ART	asf		-NE	527
+C			C			NE	asf		HD	527
+i			i			APPR	d		-	529
+D			D			NE	dsn		HD	528
+g		f			VVPP	--		HD	533
+,			,			$,	--		--	0
+"			"			$(	--		--	0
+d			d			KOUS	--		-	535
+d			d			ADV	--		HD	536
+e			e			ART	nsn		-	537
+A		A		NN	nsn		HD	537
+g			b			VVPP	--		HD	539	%% LU=82896
+w			w		VAFIN	3sis		HD	540
+"			"			$(	--		--	0
+.			.			$.	--		--	0
+#500			--			NX	--		APP	504
+#501			--			NX	--		APP	503
+#502			--			NX	--		APP	503
+#503			--			NX	--		APP	504
+#504			--			NX	--		--	0
+#505			--			ADJX	--		-	506
+#506			--			NX	--		HD	516
+#507			--			ADJX	--		-	508
+#508			--			NX	--		HD	514
+#509			--			NX	--		HD	512
+#510			--			NX	--		HD	511
+#511			--			PX	--		-	512
+#512			--			NX	--		HD	513
+#513			--			PX	--		-	514
+#514			--			NX	--		HD	515
+#515			--			PX	--		-	516
+#516			--			NX	--		ON	517
+#517			--			VF	--		-	544
+#518			--			VXFIN	--		HD	519
+#519			--			LK	--		-	544
+#520			--			NX	--		HD	525
+#521			--			ADJX	--		-	522
+#522			--			NX	--		HD	524
+#523			--			NX=ORG	--		-	524 %% R=coreferential.6:504
+#524			--			NX	--		-	525 %% R=coreferential.4:6
+#525			--			NX	--		HD	526
+#526			--			PX	--		V-MOD	532
+#527			--			NX=ORG	--		HD	530
+#528			--			NX=GPE	--		HD	529 %% R=coreferential.2:509
+#529			--			PX	--		-	530
+#530			--			NX	--		HD	531
+#531			--			PX	--		FOPP	532
+#532			--			MF	--		-	544
+#533			--			VXINF	--		OV	534
+#534			--			VC	--		-	544
+#535			--			C	--		-	542
+#536			--			ADVX	--		V-MOD	538
+#537			--			NX	--		ON	538
+#538			--			MF	--		-	542
+#539			--			VXINF	--		OV	541
+#540			--			VXFIN	--		HD	541
+#541			--			VC	--		-	542
+#542			--			SIMPX	--		MOD	543
+#543			--			NF	--		-	544
+#544			--			SIMPX	--		--	0
+#EOS 7
+#BOS 8  -1 1047480240 0
+D			d			ART	nsn		-	500
+A		A		NN	nsn		HD	500
+s			s			VAFIN	3sks		HD	502
+"			"			$(	--		--	0
+e			e			ART	nsn		-	504
+P		P		NN	nsn		HD	504
+v			v			APPR	d		-	508
+i			s			PPER	dsf3		HD	505
+u			u			KON	--		-	507
+a			a	PIS	dp*		HD	506
+"			"			$(	--		--	0
+.			.			$.	--		--	0
+#500			--			NX	--		ON	501 %% R=coreferential.7:537
+#501			--			VF	--		-	511
+#502			--			VXFIN	--		HD	503
+#503			--			LK	--		-	511
+#504			--			NX	--		HD	509
+#505			--			NX	--		KONJ	507 %% R=anaphoric.6:518
+#506			--			NX	--		KONJ	507
+#507			--			NX	--		HD	508
+#508			--			PX	--		-	509
+#509			--			NX	--		PRED	510
+#510			--			MF	--		-	511
+#511			--			SIMPX	--		--	0
+#EOS 8
+#BOS 9  -1 1047480240 0
+I			i			APPR	d		-	501
+d			d			ART	dsf		-	500
+T			T			NN	dsf		HD	500
+s			s			VVFIN	3sis		HD	503	%% LU=112247
+U			U			NE	nsf		-	505
+W		W		NE	nsf		-	505
+i			i			APPRART	dsn		-	510
+K		K		NN	dsn		HD	506
+f			f			APPR	a		-	508
+d			d			ART	asn		-	507
+A		A		NN	asn		HD	507
+,			,			$,	--		--	0
+e			e			ART	asf		-	514
+d		d		ADJA	asf		HD	513
+U		U		NN	asf		HD	514
+v			v			APPR	d		-	516
+G			G			NN	dpn		HD	515
+h			h		VAFIN	3sks		HD	519
+e   		e			PPER	nsn3		HD	521
+a			a			ADV	--		HD	522
+n			n			PTKNEG	--		HD	523
+g			g			VVPP	--		HD	525
+,			,			$,	--		--	0
+s			s			VVFIN	3sis		HD	529
+s			s			PPER	nsf3		HD	531
+.			.			$.	--		--	0
+#500			--			NX	--		HD	501
+#501			--			PX	--		MOD	502
+#502			--			VF	--		-	512
+#503			--			VXFIN	--		HD	504
+#504			--			LK	--		-	512
+#505			--			NX=PER	--		ON	511 %% R=coreferential.8:505
+#506			--			NX	--		HD	509
+#507			--			NX	--		HD	508 %% R=coreferential.8:500
+#508			--			PX	--		-	509
+#509			--			NX	--		HD	510
+#510			--			PX	--		V-MOD	511
+#511			--			MF	--		-	512
+#512			--			SIMPX	--		KONJ	534
+#513			--			ADJX	--		-	514
+#514			--			NX	--		HD	517
+#515			--			NX	--		HD	516
+#516			--			PX	--		-	517
+#517			--			NX	--		OA	518
+#518			--			VF	--		-	527
+#519			--			VXFIN	--		HD	520
+#520			--			LK	--		-	527
+#521			--			NX	--		ON	524 %% R=expletive
+#522			--			ADVX	--		MOD	524
+#523			--			ADVX	--		MOD	524
+#524			--			MF	--		-	527
+#525			--			VXINF	--		OV	526
+#526			--			VC	--		-	527
+#527			--			SIMPX	--		OS	528
+#528			--			VF	--		-	533
+#529			--			VXFIN	--		HD	530
+#530			--			LK	--		-	533
+#531			--			NX	--		ON	532 %% R=anaphoric.9:505
+#532			--			MF	--		-	533
+#533			--			SIMPX	--		KONJ	534
+#534			--			SIMPX	--		--	0
+#EOS 9
+#BOS 10  2 1220518467 0
+"			"			$(	--		--	0
+W			w			KOUS	--		-	500
+d			d			ADV	--		HD	501
+w			e			PIS	***		HD	502
+g			b			VVPP	--		HD	504
+w			w		VAPP	--		HD	505
+i			s		VAFIN	3sis		HD	506
+,			,			$,	--		--	0
+d			d			ADV	--		HD	510
+i			s			VAFIN	3sis		HD	512
+d			d			PDS	nsn		HD	514
+n			n			PTKNEG	--		HD	515
+i			i			APPR	d		-	517
+O			O			NN	dsf		HD	516
+"			"			$(	--		--	0
+-			-			$(	--		--	0
+h		h		ADV	--		HD	520
+e			e			ART	asm		-	521
+B		B		NN	asm		HD	521
+k			k		VMFIN	3sis		HD	523
+s			s			PPER	nsf3		HD	525
+s			#			PRF	ds*3		HD	526
+v		v		VVINF	--		HD	528
+.			.			$.	--		--	0
+#500			--			C	--		-	508
+#501			--			ADVX	--		MOD	503
+#502			--			NX	--		ON	503
+#503			--			MF	--		-	508
+#504			--			VXINF	--		OV	507
+#505			--			VXINF	--		OV	507	refvc	504
+#506			--			VXFIN	--		HD	507
+#507			--			VC	--		-	508
+#508			--			SIMPX	--		MOD-MOD	509
+#509			--			LV	--		-	519
+#510			--			ADVX	--		MOD	511	refmod	508
+#511			--			VF	--		-	519
+#512			--			VXFIN	--		HD	513
+#513			--			LK	--		-	519
+#514			--			NX	--		ON	518
+#515			--			ADVX	--		MOD	518
+#516			--			NX	--		HD	517
+#517			--			PX	--		PRED	518
+#518			--			MF	--		-	519
+#519			--			SIMPX	--		KONJ	531
+#520			--			ADVX	--		-	521
+#521			--			NX	--		OA	522
+#522			--			VF	--		-	530
+#523			--			VXFIN	--		HD	524
+#524			--			LK	--		-	530
+#525			--			NX	--		ON	527 %% R=anaphoric.9:531
+#526			--			NX	--		OD	527
+#527			--			MF	--		-	530
+#528			--			VXINF	--		OV	529
+#529			--			VC	--		-	530
+#530			--			SIMPX	--		KONJ	531
+#531			--			SIMPX	--		--	0
+#EOS 10

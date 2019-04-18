@@ -1,0 +1,87 @@
+#BOS 6  2 1432041646 0
+V		v		ADJD	--		HD	500
+,			,			$,	--		--	0
+s			s			ADV	--		HD	501
+d			d			ART	nsn		-	502
+S		S		NN	nsn		HD	502
+e			e			ART	gsf		-	503
+M           m		NN	gsf		HD	503
+d			d			ART	gsf		-NE	504
+A			A			NN	gsf		HD	504
+,			,			$,	--		--	0
+s			s			VAFIN	3sks		HD	505
+d			d			ART	nsf		-	506
+L	L	NN	nsf		HD	506
+U			U			NE	nsf		-	507	%% Ute
+W		W		NE	nsf		-	507
+,			,			$,	--		--	0
+d			d			PRELS	nsf		HD	508
+s			#			PRF	as*3		HD	509
+j			j			ADV	--		HD	510
+a			a			KOKOM	--		-	511
+"			"			$(	--		--	0
+S		S		NN	nsf		HD	511
+"			"			$(	--		--	0
+g			g			VVFIN	3sks		HD	512
+,			,			$,	--		--	0
+"			"			$(	--		--	0
+w			w			PWAV	--		HD	513
+d			d			ADV	--		HD	514
+a			a			PIS	np*		HD	515
+w		w			VVFIN	3pis		HD	516
+,			,			$,	--		--	0
+w			w			PWAV	--		HD	517
+e			e			ADJD	--		HD	531
+s 		s		PPER	nsf3		HD	518
+m			m			APPR	d		-	532
+T			T			NE	dsm		HD	519
+z		z		VVFIN	3sit		HD	520
+"			"			$(	--		--	0
+.			.			$.	--		--	0
+#500			--			ADJX	--		PRED	521
+#501			--			ADVX	--		-	538
+#502			--			NX	--		HD	534
+#503			--			NX	--		HD	522
+#504			--			NX=ORG	--		-	522 %% R=coreferential.4:523
+#505			--			VXFIN	--		HD	523
+#506			--			NX	--		APP	524
+#507			--			NX=PER	--		APP	524
+#508			--			NX	--		ON	525 %% R=anaphoric.6:524
+#509			--			NX	--		OA	526 %% R=inherent_reflexive
+#510			--			ADVX	--		MOD	526
+#511			--			NX	--		PRED	526
+#512			--			VXFIN	--		HD	527
+#513			--			ADVX	--		MOD	528
+#514			--			ADVX	--		MOD	529
+#515			--			NX	--		ON	529
+#516			--			VXFIN	--		HD	530
+#517			--			ADVX	--		-	531
+#518			--			NX	--		ON	537 %% R=anaphoric.6:508
+#519			--			NX=PER	--		HD	532 %% R=coreferential.4:511
+#520			--			VXFIN	--		HD	533
+#521			--			VF	--		-	545
+#522			--			NX	--		-	534
+#523			--			LK	--		-	545
+#524			--			NX	--		ON	535 %% R=coreferential.3:502
+#525			--			C	--		-	543
+#526			--			MF	--		-	543
+#527			--			VC	--		-	543
+#528			--			C	--		-	541
+#529			--			MF	--		-	541
+#530			--			VC	--		-	541
+#531			--			ADJX	--		V-MOD	536
+#532			--			PX	--		OPP	537
+#533			--			VC	--		-	539
+#534			--			NX	--		HD	538
+#535			--			MF	--		-	545
+#536			--			C	--		-	539
+#537			--			MF	--		-	539
+#538			--			NX	--		--	0
+#539			--			SIMPX	--		OS	540
+#540			--			NF	--		-	541
+#541			--			SIMPX	--		MOD	542
+#542			--			NF	--		-	543
+#543			--			R-SIMPX	--		ON-MOD	544
+#544			--			NF	--		-	545
+#545			--			SIMPX	--		--	0
+#EOS 6

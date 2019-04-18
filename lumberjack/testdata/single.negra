@@ -1,0 +1,13 @@
+#BOS 1  2 1202391857 0 %% HEADLINE
+V		v		VVFIN	3sit		HD	500
+d			d			ART	nsf		-NE	502
+A			a			NN	nsf		HD	502
+S		s		NN	asn		HD	503
+?			?			$.	--		--	0
+#500			--			VXFIN	--		HD	501
+#501			--			LK	--		-	505
+#502			--			NX=ORG	--		ON	504
+#503			--			NX	--		OA	504
+#504			--			MF	--		-	505
+#505			--			SIMPX	--		--	0
+#EOS 1

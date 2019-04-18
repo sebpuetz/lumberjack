@@ -1,0 +1,17 @@
+sent = { sent_start ~ terminal ~ (nonterminal | terminal)* ~ sent_end }
+sent_start = { "#BOS" ~ ID ~ consume_line ~ NEWLINE }
+sent_end = { "#EOS" ~ ID ~ NEWLINE?}
+terminal = { form ~ lemma ~ pos ~ morph ~ edge_label ~ ID ~ consume_line ~ NEWLINE }
+nonterminal = { "#" ~ NTID ~ other ~ label ~ other ~ edge_label ~ ID ~ consume_line ~ NEWLINE }
+ID = @{ ASCII_DIGIT+ }
+NTID = @{ ASCII_DIGIT ~ ASCII_DIGIT ~ ASCII_DIGIT }
+label = @{ char+ }
+form = @{ char+ }
+lemma = @{ char+ }
+morph = @{ char+ }
+pos = @{ char+ }
+edge_label = @{ char+ }
+other = @{ char+ }
+consume_line = _{ (!NEWLINE ~ ANY)* }
+char = _{ !(WHITESPACE | NEWLINE) ~ ANY }
+WHITESPACE = _{ " " | "\t" }

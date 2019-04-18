@@ -6,6 +6,8 @@ extern crate pest_derive;
 
 pub mod edge;
 
+pub mod negra_reader;
+
 pub mod node;
 
 pub mod ptb_reader;
