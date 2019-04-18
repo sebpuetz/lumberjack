@@ -1,0 +1,9 @@
+tree = _{SOI ~ nonterminal ~ EOI}
+nonterminal = { open ~ node_label ~ (nonterminal | preterminal)+ ~ close }
+char = _{ !( WHITESPACE | "(" | ")" ) ~ ANY }
+preterminal = { open ~ node_label ~ terminal ~ close }
+terminal = @{ char+ }
+node_label = @{ char+ }
+open = _{ "(" }
+close = _{ ")" }
+WHITESPACE = _{ " " | NEWLINE }

@@ -1,0 +1,9 @@
+(S
+    (NT1
+        (T1 This) )
+    (NT2
+        (T2 is)
+        )
+    (T3:edge a)
+    (T=4 test)
+)
