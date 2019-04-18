@@ -53,8 +53,14 @@ impl PTBFormatter {
     /// Returns linearized (bracketed) representation of a `Tree`.
     ///
     /// Parentheses `"("` and `")"` are replaced by `"LBR"` and `"RBR"` respectively.
+    ///
+    /// Returns `Error` if the `Tree` is nonprojective.
     pub fn format(&self, sentence: &Tree) -> Result<String, Error> {
-        Ok(self.format_sub_tree(sentence, sentence.root(), None))
+        if sentence.projective() {
+            Ok(self.format_sub_tree(sentence, sentence.root(), None))
+        } else {
+            Err(format_err!("Can not format non-projective tree."))
+        }
     }
 
     fn format_sub_tree(&self, sentence: &Tree, position: NodeIndex, edge: Option<&str>) -> String {
