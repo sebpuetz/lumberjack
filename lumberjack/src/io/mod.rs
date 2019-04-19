@@ -1,10 +1,10 @@
 mod negra;
-pub use negra::{NegraTreeIter, negra_to_tree};
+pub use negra::{negra_to_tree, NegraTreeIter};
 mod ptb;
 pub use ptb::{PTBFormat, PTBLineFormat, PTBTreeIter};
 
-use failure::Error;
 use crate::tree::Tree;
+use failure::Error;
 
 pub trait WriteTree {
     fn tree_to_string(&self, tree: &Tree) -> Result<String, Error>;
@@ -14,12 +14,24 @@ pub trait ReadTree {
     fn string_to_tree(&self, string: &str) -> Result<Tree, Error>;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Format {
     NEGRA,
     PTB,
     Simple,
     TueBa,
+}
+
+impl Format {
+    pub fn try_from_str(s: &str) -> Result<Format, Error> {
+        match s.to_lowercase().as_str() {
+            "negra" => Ok(Format::NEGRA),
+            "ptb" => Ok(Format::PTB),
+            "simple" => Ok(Format::Simple),
+            "tueba" => Ok(Format::TueBa),
+            _ => Err(format_err!("Unknown format: {}", s)),
+        }
+    }
 }
 
 impl WriteTree for Format {

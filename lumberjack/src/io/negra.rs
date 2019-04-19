@@ -6,8 +6,8 @@ use pest::iterators::Pair;
 use pest::Parser;
 use petgraph::stable_graph::StableGraph;
 
-use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
 use crate::node::{NTBuilder, TerminalBuilder};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
 
 /// Iterator over constituency trees in a NEGRA export file.
 ///
@@ -18,15 +18,15 @@ use crate::node::{NTBuilder, TerminalBuilder};
 /// Note:   If the reader never encounters a line according to `Rule::bos`, `None` is returned.
 ///         `Rule::bos` expects a line starting with `#BOS SENT_ID` followed by optional comments.
 pub struct NegraTreeIter<R>
-    where
-        R: BufRead,
+where
+    R: BufRead,
 {
     inner: Lines<R>,
 }
 
 impl<R> NegraTreeIter<R>
-    where
-        R: BufRead,
+where
+    R: BufRead,
 {
     /// Creates a new `NegraTreeIter` over the NEGRA trees in the reader.
     pub fn new(reader: R) -> NegraTreeIter<R> {
@@ -36,8 +36,8 @@ impl<R> NegraTreeIter<R>
     }
 }
 impl<R> Iterator for NegraTreeIter<R>
-    where
-        R: BufRead,
+where
+    R: BufRead,
 {
     type Item = Result<Tree, Error>;
 
@@ -252,7 +252,7 @@ mod tests {
         negra_to_tree, process_nonterminal, process_terminal, NEGRAParser, NegraTreeIter, Rule,
     };
 
-    use crate::{Edge, Node, NonTerminal, Terminal, Projectivity, Span, Tree};
+    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
     fn test_first10_ok() {

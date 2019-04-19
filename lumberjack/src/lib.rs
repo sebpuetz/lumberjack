@@ -8,7 +8,7 @@ pub mod io;
 pub use io::{NegraTreeIter, PTBTreeIter};
 
 mod tree;
-pub use tree::{Tree, Projectivity};
+pub use tree::{Projectivity, Tree};
 
 mod edge;
 pub use edge::Edge;

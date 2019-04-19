@@ -281,15 +281,17 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if let PTBLineFormat::SingleLine = self.line_format {
-            if let Some(line) = self.inner.next() {
+            while let Some(line) = self.inner.next() {
                 let line = match line {
                     Ok(line) => line,
                     Err(err) => return Some(Err(err.into())),
                 };
+                if line.starts_with('%') {
+                    continue;
+                }
                 return Some(self.format.string_to_tree(&line));
-            } else {
-                return None;
             }
+            return None;
         } else {
             let mut buffer = String::new();
             let mut open = 0;
@@ -298,7 +300,7 @@ where
                     Ok(line) => line,
                     Err(err) => return Some(Err(err.into())),
                 };
-                if line.is_empty() {
+                if (line.starts_with('%') && buffer.is_empty()) || line.is_empty() {
                     continue;
                 }
                 let (line_open, line_closed) = count_pars(&line);

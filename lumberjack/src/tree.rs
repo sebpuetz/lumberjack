@@ -468,7 +468,6 @@ impl Climber {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -476,7 +475,7 @@ mod tests {
     use petgraph::prelude::NodeIndex;
     use petgraph::prelude::StableGraph;
 
-    use crate::{Node, Tree, Edge, NonTerminal, Projectivity, Span, Terminal};
+    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
     fn insert_unks_nonproj() {

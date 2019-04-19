@@ -72,13 +72,13 @@ impl Node {
     }
 
     /// Extend the upper bounds of a span.
-    pub (crate) fn extend_span(&mut self) -> Result<(), Error> {
+    pub(crate) fn extend_span(&mut self) -> Result<(), Error> {
         match self {
             Node::Terminal(_) => Err(format_err!("Can't extend terminal's span.")),
             Node::NonTerminal(nt) => {
                 nt.span.extend();
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -104,8 +104,8 @@ pub struct NonTerminal {
 
 impl NonTerminal {
     pub(crate) fn new<S>(label: S, span: Span) -> Self
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         NonTerminal {
             label: label.into(),
@@ -114,7 +114,7 @@ impl NonTerminal {
         }
     }
 
-    pub (crate) fn set_span(&mut self, span: Span) {
+    pub(crate) fn set_span(&mut self, span: Span) {
         mem::replace(&mut self.span, span);
     }
 
@@ -130,8 +130,8 @@ impl NonTerminal {
 
     /// Return old label and replace with `label`.
     pub fn set_label<S>(&mut self, label: S) -> String
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.label, label.into())
     }
@@ -143,8 +143,8 @@ impl NonTerminal {
 
     /// Return old annotation and replace with `annotation`.
     pub fn set_annotation<S>(&mut self, annotation: Option<S>) -> Option<String>
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.annotation, annotation.map(Into::into))
     }
@@ -159,8 +159,8 @@ pub(crate) struct NTBuilder {
 
 impl NTBuilder {
     pub(crate) fn new<S>(label: S) -> Self
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         NTBuilder {
             label: label.into(),
@@ -175,8 +175,8 @@ impl NTBuilder {
     }
 
     pub(crate) fn annotation<S>(mut self, annotation: Option<S>) -> Self
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         self.annotation = annotation.map(Into::into);
         self
@@ -217,8 +217,8 @@ pub struct Terminal {
 impl Terminal {
     #[allow(dead_code)]
     pub(crate) fn new<S>(form: S, pos: S, span: Span) -> Self
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         Terminal {
             form: form.into(),
@@ -244,8 +244,8 @@ impl Terminal {
 
     /// Replace form with `new_form`. Return old value.
     pub fn set_form<S>(&mut self, new_form: S) -> String
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.form, new_form.into())
     }
@@ -257,8 +257,8 @@ impl Terminal {
 
     /// Replace part of speech with `new_pos`. Return old value.
     pub fn set_pos<S>(&mut self, new_pos: S) -> String
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.pos, new_pos.into())
     }
@@ -270,8 +270,8 @@ impl Terminal {
 
     /// Replace lemma with `new_lemma`. Return old value.
     pub fn set_lemma<S>(&mut self, new_lemma: Option<S>) -> Option<String>
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.lemma, new_lemma.map(Into::into))
     }
@@ -283,8 +283,8 @@ impl Terminal {
 
     /// Replace morphological features with `new_morph`. Return old value.
     pub fn set_morph<S>(&mut self, new_morph: Option<S>) -> Option<String>
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         mem::replace(&mut self.morph, new_morph.map(Into::into))
     }
@@ -302,8 +302,8 @@ pub(crate) struct TerminalBuilder {
 #[allow(dead_code)]
 impl TerminalBuilder {
     pub fn new<S>(form: S, pos: S, span: Span) -> Self
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         TerminalBuilder {
             form: form.into(),
@@ -332,16 +332,16 @@ impl TerminalBuilder {
     }
 
     pub fn lemma<S>(mut self, lemma: S) -> TerminalBuilder
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         self.lemma = Some(lemma.into());
         self
     }
 
     pub fn morph<S>(mut self, morph: S) -> TerminalBuilder
-        where
-            S: Into<String>,
+    where
+        S: Into<String>,
     {
         self.morph = Some(morph.into());
         self

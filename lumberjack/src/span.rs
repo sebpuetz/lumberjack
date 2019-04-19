@@ -62,7 +62,7 @@ impl Span {
         }
     }
 
-    pub (crate) fn discontinuous(&self) -> Option<&SkipSpan> {
+    pub(crate) fn discontinuous(&self) -> Option<&SkipSpan> {
         if let Span::Discontinuous(span) = self {
             Some(span)
         } else {
@@ -99,7 +99,7 @@ impl Span {
     }
 
     // Method used internally to increment the upper bounds of a span.
-    pub (crate) fn extend(&mut self) {
+    pub(crate) fn extend(&mut self) {
         match self {
             Span::Continuous(span) => span.upper += 1,
             Span::Discontinuous(span) => span.upper += 1,
@@ -107,7 +107,7 @@ impl Span {
     }
 
     // Internally used constructor for convenience.
-    pub (crate) fn new_continuous(lower: usize, upper: usize) -> Self {
+    pub(crate) fn new_continuous(lower: usize, upper: usize) -> Self {
         Span::Continuous(ContinuousSpan::new(lower, upper))
     }
 }
@@ -163,7 +163,10 @@ impl SkipSpan {
     // Internally used constructor for SkipSpan.
     pub(crate) fn new(lower: usize, upper: usize, skip: HashSet<usize>) -> Self {
         assert!(lower < upper);
-        assert!(!skip.is_empty(), "SkipSpan hast to contain skipped indices.");
+        assert!(
+            !skip.is_empty(),
+            "SkipSpan hast to contain skipped indices."
+        );
         assert_ne!(skip.len(), upper - lower, "Can't skip all indices.");
 
         SkipSpan { lower, upper, skip }
@@ -234,7 +237,10 @@ impl<'a> IntoIterator for &'a SkipSpan {
     type IntoIter = SpanIter<'a>;
 
     fn into_iter(self) -> SpanIter<'a> {
-        SpanIter{range: self.lower..self.upper, skip: Some(&self.skip)}
+        SpanIter {
+            range: self.lower..self.upper,
+            skip: Some(&self.skip),
+        }
     }
 }
 
@@ -243,7 +249,10 @@ impl<'a> IntoIterator for &'a ContinuousSpan {
     type IntoIter = SpanIter<'a>;
 
     fn into_iter(self) -> SpanIter<'a> {
-        SpanIter{range: self.lower..self.upper, skip: None}
+        SpanIter {
+            range: self.lower..self.upper,
+            skip: None,
+        }
     }
 }
 
