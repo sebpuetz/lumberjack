@@ -6,11 +6,8 @@ use pest::iterators::Pair;
 use pest::Parser;
 use petgraph::stable_graph::StableGraph;
 
-use crate::edge::Edge;
-use crate::node::NonTerminal;
-use crate::node::{NTBuilder, Node, TerminalBuilder};
-use crate::span::Span;
-use crate::tree::{Projectivity, Tree};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
+use crate::node::{NTBuilder, TerminalBuilder};
 
 /// Iterator over constituency trees in a NEGRA export file.
 ///
@@ -94,10 +91,8 @@ pub fn negra_to_tree(negra_string: &str) -> Result<Tree, Error> {
 
 // dummy struct required by pest
 #[derive(Parser)]
-#[grammar = "negra.pest"]
+#[grammar = "io/negra.pest"]
 struct NEGRAParser;
-
-pub struct NEGRABuilder {}
 
 fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
     let mut graph = StableGraph::new();
@@ -256,10 +251,8 @@ mod tests {
     use super::{
         negra_to_tree, process_nonterminal, process_terminal, NEGRAParser, NegraTreeIter, Rule,
     };
-    use crate::edge::Edge;
-    use crate::node::{Node, NonTerminal, Terminal};
-    use crate::span::Span;
-    use crate::tree::{Projectivity, Tree};
+
+    use crate::{Edge, Node, NonTerminal, Terminal, Projectivity, Span, Tree};
 
     #[test]
     fn test_first10_ok() {

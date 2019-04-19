@@ -1,51 +1,68 @@
-use std::io::BufRead;
-use std::io::Lines;
+use std::io::{BufRead, Lines};
 
 use failure::Error;
 use pest::iterators::Pair;
 use pest::Parser;
-use petgraph::stable_graph::{NodeIndex, StableGraph};
+use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 
-use crate::edge::Edge;
-use crate::node::{NTBuilder, Node, TerminalBuilder};
-use crate::span::Span;
-use crate::tree::{Projectivity, Tree};
+use crate::io::{ReadTree, WriteTree};
+use crate::node::{NTBuilder, TerminalBuilder};
+use crate::{Edge, Node, Projectivity, Span, Tree};
+
+/// `PTBFormat`
+pub enum PTBFormat {
+    /// PTB V2 Format.
+    ///
+    /// Trees don't include edge labels, some nodes contain additional tags. Node labels are split
+    /// on the first `"-"`, additional tags are put together into the same `annotation` field.
+    ///
+    /// E.g. `"(TAG-annotation1-annotation2 (POS terminal))"` results in a non-terminal with:
+    /// * `label == "TAG"`
+    /// * `annotation == Some("annotation1-annotation2")`
+    /// * `edge == None`
+    PTB,
+    /// Simple Format.
+    ///
+    /// Assumes trees don't include edge labels or any other annotations.
+    ///
+    /// E.g. `"(TAG (POS terminal))"` results in a non-terminal with:
+    /// * `label == "TAG"`
+    /// * `annotation == None`
+    /// * `edge == None`
+    Simple,
+    /// TueBa PTB V2 Format.
+    ///
+    /// Trees include edge labels, some nodes contain semantic annotations. Node labels are first
+    /// split on `":"`, to seperate content into node tag and edge, then the tag is split again on
+    /// `"="` to seperate the tag and grammatical annotation.
+    ///
+    /// E.g., `"(TAG=annotation:edge_label form (POS terminal))"` results in a terminal with:
+    /// * `label == "TAG"`
+    /// * `annotation == Some("annotation")`
+    /// * `edge == Some("edge_label")`
+    TueBa,
+}
+
+impl WriteTree for PTBFormat {
+    fn tree_to_string(&self, tree: &Tree) -> Result<String, Error> {
+        if tree.projective() {
+            Ok(self.format_sub_tree(tree, tree.root(), None))
+        } else {
+            Err(format_err!("Can't linearize nonprojective tree"))
+        }
+    }
+}
 
 // dummy struct required by pest
 #[derive(Parser)]
-#[grammar = "ptb.pest"]
+#[grammar = "io/ptb.pest"]
 struct PTBParser;
 
-/// `PTBBuilder`
-///
-/// This struct is used to construct a `Tree` from stringly representations.
-pub struct PTBBuilder {
-    edge_sep: String,
-    annotation_sep: String,
-}
-
-impl Default for PTBBuilder {
-    fn default() -> Self {
-        PTBBuilder {
-            edge_sep: ":".into(),
-            annotation_sep: "=".into(),
-        }
-    }
-}
-
-impl PTBBuilder {
-    pub fn new(edge_sep: impl Into<String>, annotation_sep: impl Into<String>) -> PTBBuilder {
-        PTBBuilder {
-            edge_sep: edge_sep.into(),
-            annotation_sep: annotation_sep.into(),
-        }
-    }
-
-    /// Constructs new tree from a `&str` containing wellformed PTB.
-    pub fn ptb_to_tree(&self, line: &str) -> Result<Tree, Error> {
+impl ReadTree for PTBFormat {
+    fn string_to_tree(&self, string: &str) -> Result<Tree, Error> {
         let mut graph = StableGraph::new();
         let mut terminals = Vec::new();
-        let mut parsed_line = PTBParser::parse(Rule::tree, line)?;
+        let mut parsed_line = PTBParser::parse(Rule::tree, string)?;
         let (_, root, _) =
             self.parse_value(parsed_line.next().unwrap(), &mut graph, &mut terminals)?;
         Ok(Tree::new(
@@ -54,6 +71,77 @@ impl PTBBuilder {
             root,
             Projectivity::Projective,
         ))
+    }
+}
+
+impl PTBFormat {
+    pub fn try_from_str(s: &str) -> Result<PTBFormat, Error> {
+        let s = s.to_lowercase();
+        match s.as_str() {
+            "tueba" => Ok(PTBFormat::TueBa),
+            "ptb" => Ok(PTBFormat::PTB),
+            "simple" => Ok(PTBFormat::Simple),
+            _ => Err(format_err!("Unknown format: {}", s)),
+        }
+    }
+
+    fn format_sub_tree(&self, sentence: &Tree, position: NodeIndex, edge: Option<&str>) -> String {
+        let sent = sentence.graph();
+
+        match &sent[position] {
+            Node::Terminal(terminal) => self.fmt_term(terminal.form(), terminal.pos(), edge),
+            Node::NonTerminal(nt) => {
+                let mut nodes: Vec<_> = sent
+                    .edges_directed(position, Direction::Outgoing)
+                    .collect::<Vec<_>>();
+                // sort child nodes by covered span
+                nodes.sort_by(|edge_ref_1, edge_ref_2| {
+                    let span_1 = sentence.graph()[edge_ref_1.target()].span();
+                    let span_2 = sentence.graph()[edge_ref_2.target()].span();
+                    span_1.cmp(&span_2)
+                });
+                let mut sub_tree_rep = Vec::with_capacity(nodes.len());
+                sub_tree_rep.push(self.fmt_inner(nt.label(), edge, nt.annotation()));
+                sub_tree_rep.extend(nodes.into_iter().map(|edge_ref| {
+                    self.format_sub_tree(sentence, edge_ref.target(), edge_ref.weight().label())
+                }));
+                let node_sep = if let PTBFormat::TueBa = self { "" } else { " " };
+                format!("({})", sub_tree_rep.join(node_sep))
+            }
+        }
+    }
+
+    fn fmt_inner(&self, label: &str, edge: Option<&str>, annotation: Option<&str>) -> String {
+        let mut representation = label.to_string();
+        match self {
+            PTBFormat::PTB => {
+                if let Some(annotation) = annotation {
+                    representation.push('-');
+                    representation.push_str(annotation);
+                }
+            }
+            PTBFormat::Simple => (),
+            PTBFormat::TueBa => {
+                if let Some(annotation) = annotation {
+                    representation.push('=');
+                    representation.push_str(annotation);
+                }
+                representation.push(':');
+                representation.push_str(edge.unwrap_or("--"));
+            }
+        }
+        representation
+    }
+
+    fn fmt_term(&self, form: &str, pos: &str, edge: Option<&str>) -> String {
+        let pos = pos.replace("(", "LBR").replace(")", "RBR");
+        let form = form.replace("(", "LBR").replace(")", "RBR");
+        if let PTBFormat::TueBa = self {
+            let edge = edge.unwrap_or("--");
+            format!("({}:{} {})", pos, edge, form)
+        } else {
+            format!("({} {})", pos, form)
+        }
     }
 
     // this method traverses the linearized tree and builds a StableGraph
@@ -142,17 +230,25 @@ impl PTBBuilder {
         if let Rule::node_label = pair.as_rule() {
             let label = pair.as_str();
             // split label and edge label
-            let mut parts = label.split(&self.edge_sep);
-            let tag = parts.next().unwrap();
-            // splits label at first index of given annotation seperator.
-            let (tag, annotation) = if let Some(idx) = tag.find(&self.annotation_sep) {
-                let (tag, annotation) = tag.split_at(idx);
-                (tag, annotation.into())
-            } else {
-                (tag, None)
-            };
-            let edge = parts.next();
-            Ok((tag, edge, annotation))
+            match self {
+                PTBFormat::PTB => {
+                    if let Some(idx) = label.find('-') {
+                        Ok((&label[..idx], None, Some(&label[idx..])))
+                    } else {
+                        Ok((label, None, None))
+                    }
+                }
+                PTBFormat::TueBa => {
+                    let mut parts = label.split(':');
+                    let tag = parts.next().unwrap();
+                    let edge = parts.next();
+                    let mut label_parts = tag.split('=');
+                    let label = label_parts.next().unwrap();
+                    let annotation = label_parts.next();
+                    Ok((label, edge, annotation))
+                }
+                PTBFormat::Simple => Ok((label, None, None)),
+            }
         } else {
             Err(format_err!(
                 "Node did not start with label {}",
@@ -162,10 +258,10 @@ impl PTBBuilder {
     }
 }
 
-/// `PTBFormat`.
+/// `PTBLineFormat`.
 ///
 /// This enum specifies whether the trees are encoded in single-line or multi-line format.
-pub enum PTBFormat {
+pub enum PTBLineFormat {
     SingleLine,
     MultiLine,
 }
@@ -173,24 +269,24 @@ pub enum PTBFormat {
 /// Iterator over trees in PTB format file.
 pub struct PTBTreeIter<R> {
     inner: Lines<R>,
-    multiline: PTBFormat,
-    builder: PTBBuilder,
+    line_format: PTBLineFormat,
+    format: PTBFormat,
 }
 
 impl<R> Iterator for PTBTreeIter<R>
-    where
-        R: BufRead,
+where
+    R: BufRead,
 {
     type Item = Result<Tree, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let PTBFormat::SingleLine = self.multiline {
+        if let PTBLineFormat::SingleLine = self.line_format {
             if let Some(line) = self.inner.next() {
                 let line = match line {
                     Ok(line) => line,
                     Err(err) => return Some(Err(err.into())),
                 };
-                return Some(self.builder.ptb_to_tree(&line));
+                return Some(self.format.string_to_tree(&line));
             } else {
                 return None;
             }
@@ -210,7 +306,7 @@ impl<R> Iterator for PTBTreeIter<R>
                 open -= line_closed;
                 buffer.push_str(line.as_str());;
                 if open == 0 {
-                    return Some(self.builder.ptb_to_tree(&buffer));
+                    return Some(self.format.string_to_tree(&buffer));
                 }
             }
         }
@@ -219,22 +315,15 @@ impl<R> Iterator for PTBTreeIter<R>
 }
 
 impl<R> PTBTreeIter<R>
-    where
-        R: BufRead,
+where
+    R: BufRead,
 {
-    pub fn new(read: R, builder: PTBBuilder, format: PTBFormat) -> Self {
+    /// Constructs a new tree iterator.
+    pub fn new(read: R, format: PTBFormat, line_format: PTBLineFormat) -> Self {
         PTBTreeIter {
             inner: read.lines(),
-            builder,
-            multiline: format,
-        }
-    }
-
-    pub fn new_with_defaults(read: R) -> Self {
-        PTBTreeIter {
-            inner: read.lines(),
-            builder: PTBBuilder::default(),
-            multiline: PTBFormat::SingleLine,
+            format,
+            line_format,
         }
     }
 }
@@ -262,18 +351,18 @@ mod tests {
     use petgraph::prelude::NodeIndex;
     use petgraph::stable_graph::StableGraph;
 
-    use super::PTBBuilder;
-    use crate::edge::Edge;
-    use crate::node::{Node, NonTerminal, TerminalBuilder};
-    use crate::ptb_reader::{PTBFormat, PTBTreeIter};
-    use crate::span::Span;
-    use crate::tree::{Projectivity, Tree};
+    use crate::io::{PTBFormat, PTBLineFormat, PTBTreeIter, ReadTree, WriteTree};
+    use crate::node::TerminalBuilder;
+    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
 
     #[test]
     pub fn test_multiline() {
         let input = File::open("testdata/single_multiline.ptb").unwrap();
-        let builder = PTBBuilder::default();
-        let mut reader = PTBTreeIter::new(BufReader::new(input), builder, PTBFormat::MultiLine);
+        let mut reader = PTBTreeIter::new(
+            BufReader::new(input),
+            PTBFormat::TueBa,
+            PTBLineFormat::MultiLine,
+        );
         let tree = reader.next().unwrap().unwrap();
         assert_eq!(tree.n_terminals(), 4);
     }
@@ -281,16 +370,14 @@ mod tests {
     #[test]
     pub fn test_with_edge_labels() {
         let input = "(NX:edge (NN Nounphrase) (PX:edge (PP on) (NX:another (DET a ) \
-        (ADJ single) (NX line))))";
-        let builder = PTBBuilder::default();
-        builder.ptb_to_tree(input).unwrap();
+                     (ADJ single) (NX line))))";
+        PTBFormat::TueBa.string_to_tree(input).unwrap();
     }
 
     #[test]
     pub fn test_without_edge_labels() {
         let input = "(NX (NN Nounphrase) (PX (PP on) (NX (DET a ) (ADJ single) (NX line))))";
-        let builder = PTBBuilder::default();
-        builder.ptb_to_tree(input).unwrap();
+        PTBFormat::TueBa.string_to_tree(input).unwrap();
     }
 
     #[test]
@@ -330,7 +417,7 @@ mod tests {
         cmp_graph.add_edge(root, sec, Edge::from(Some("label")));
         cmp_graph.add_edge(root, term4, Edge::default());
         let tree2 = Tree::new(cmp_graph, 4, NodeIndex::new(6), Projectivity::Projective);
-        let tree = PTBBuilder::default().ptb_to_tree(l)?;
+        let tree = PTBFormat::TueBa.string_to_tree(l)?;
         assert_eq!(tree, tree2);
 
         assert_eq!(4, tree.n_terminals());
@@ -341,7 +428,7 @@ mod tests {
     #[should_panic]
     pub fn empty_line() {
         let l = "";
-        PTBBuilder::default().ptb_to_tree(l).unwrap();
+        PTBFormat::TueBa.string_to_tree(l).unwrap();
     }
 
     #[test]
@@ -349,7 +436,7 @@ mod tests {
     pub fn closed_to_early() {
         // Tree is closed after Term1 t1))))
         let l = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (SEC:label (TERM1 t1)))) (TERM t))";
-        PTBBuilder::default().ptb_to_tree(l).unwrap();
+        PTBFormat::TueBa.string_to_tree(l).unwrap();
     }
 
     #[test]
@@ -357,7 +444,7 @@ mod tests {
     pub fn missing_par() {
         // missing parenthesis at end of string
         let l = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (SEC:label (TERM1 t1)) (TERM t)";
-        PTBBuilder::default().ptb_to_tree(l).unwrap();
+        PTBFormat::TueBa.string_to_tree(l).unwrap();
     }
 
     #[test]
@@ -365,7 +452,7 @@ mod tests {
     pub fn second_tree() {
         // missing parenthesis at end of string
         let l = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (SEC:label (TERM1 t1)) (TERM t)) (ROOT (Second tree))";
-        PTBBuilder::default().ptb_to_tree(l).unwrap();
+        PTBFormat::TueBa.string_to_tree(l).unwrap();
     }
 
     #[test]
@@ -373,6 +460,28 @@ mod tests {
     pub fn illegal_char() {
         // parenthesis as terminal in TERM1 node
         let l = "(ROOT (FIRST (TERM1 () (TERM2 t2)) (SEC:label (TERM1 t1)) (TERM t))";
-        PTBBuilder::default().ptb_to_tree(l).unwrap();
+        PTBFormat::TueBa.string_to_tree(l).unwrap();
+    }
+
+    #[test]
+    pub fn write_test() {
+        let tree = PTBFormat::TueBa
+            .string_to_tree("(VROOT:- (NP=NE:- (N:- n)) (VP:HD (V:HD v)))")
+            .unwrap();
+
+        assert_eq!(
+            PTBFormat::TueBa.tree_to_string(&tree).unwrap(),
+            "(VROOT:--(NP=NE:-(N:- n))(VP:HD(V:HD v)))"
+        );
+
+        assert_eq!(
+            PTBFormat::PTB.tree_to_string(&tree).unwrap(),
+            "(VROOT (NP-NE (N n)) (VP (V v)))"
+        );
+
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(VROOT (NP (N n)) (VP (V v)))"
+        )
     }
 }

@@ -5,10 +5,9 @@ use std::ops::{Index, IndexMut};
 use failure::{format_err, Error};
 use petgraph::prelude::*;
 
-use crate::edge::Edge;
-use crate::node::{Node, NonTerminal};
-use crate::span::Span;
+use crate::{Edge, Node, NonTerminal, Span};
 
+/// Enum describing whether a tree is projective.
 #[derive(Debug, Clone, Copy)]
 pub enum Projectivity {
     Projective,
@@ -472,13 +471,12 @@ impl Climber {
 
 #[cfg(test)]
 mod tests {
-    use crate::edge::Edge;
-    use crate::node::{Node, NonTerminal, Terminal};
-    use crate::span::Span;
-    use crate::tree::{Projectivity, Tree};
+    use std::collections::HashSet;
+
     use petgraph::prelude::NodeIndex;
     use petgraph::prelude::StableGraph;
-    use std::collections::HashSet;
+
+    use crate::{Node, Tree, Edge, NonTerminal, Projectivity, Span, Terminal};
 
     #[test]
     fn insert_unks_nonproj() {

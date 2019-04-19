@@ -3,7 +3,7 @@ use std::mem;
 
 use failure::Error;
 
-use crate::span::Span;
+use crate::Span;
 
 /// Enum representing Nodes in a constituency tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -350,11 +350,10 @@ impl TerminalBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::NTBuilder;
-    use crate::node::NonTerminal;
-    use crate::node::{Terminal, TerminalBuilder};
-    use crate::span::Span;
     use failure::Error;
+
+    use crate::node::{NTBuilder, TerminalBuilder};
+    use crate::{NonTerminal, Span, Terminal};
 
     #[test]
     fn terminal_builder() -> Result<(), Error> {

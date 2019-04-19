@@ -4,16 +4,17 @@ extern crate failure;
 #[macro_use]
 extern crate pest_derive;
 
-pub mod edge;
+pub mod io;
+pub use io::{NegraTreeIter, PTBTreeIter};
 
-pub mod negra_reader;
+mod tree;
+pub use tree::{Tree, Projectivity};
 
-pub mod node;
+mod edge;
+pub use edge::Edge;
 
-pub mod ptb_reader;
+pub(crate) mod node;
+pub use node::{Node, NonTerminal, Terminal};
 
-pub mod ptb_writer;
-
-pub mod span;
-
-pub mod tree;
+pub(crate) mod span;
+pub use span::{ContinuousSpan, SkipSpan, Span};

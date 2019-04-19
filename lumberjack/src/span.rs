@@ -272,9 +272,9 @@ impl<'a> Iterator for SpanIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::span::{Span, ContinuousSpan};
-    use crate::span::SkipSpan;
     use std::collections::HashSet;
+
+    use crate::{ContinuousSpan, SkipSpan, Span};
 
     #[test]
     #[should_panic]
