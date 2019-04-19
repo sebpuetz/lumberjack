@@ -10,3 +10,7 @@ repository = "https://github.com/sebpuetz/lumberjack"
 
 
 [dependencies]
+clap = "2"
+failure = "0.1"
+lumberjack = { path = "../lumberjack"}
+stdinout = "0.4" 
