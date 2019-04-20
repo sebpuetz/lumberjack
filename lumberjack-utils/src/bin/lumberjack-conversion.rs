@@ -5,6 +5,7 @@ use failure::Error;
 use stdinout::{Input, OrExit, Output};
 
 use lumberjack::io::{Format, PTBFormat, PTBLineFormat, WriteTree};
+use lumberjack::tree_modification::Projectivize;
 use lumberjack::{NegraTreeIter, PTBTreeIter, Tree};
 
 fn main() {

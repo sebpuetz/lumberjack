@@ -18,3 +18,7 @@ pub use node::{Node, NonTerminal, Terminal};
 
 pub(crate) mod span;
 pub use span::{ContinuousSpan, SkipSpan, Span};
+
+pub mod tree_modification;
+
+pub mod util;
