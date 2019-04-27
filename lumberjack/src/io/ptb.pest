@@ -1,5 +1,6 @@
-tree = _{SOI ~ nonterminal ~ EOI}
-nonterminal = { open ~ node_label ~ (nonterminal | preterminal)+ ~ close }
+tree = _{SOI ~ node ~ EOI}
+node = _{ preterminal | nonterminal }
+nonterminal = { open ~ node_label ~ node+ ~ close }
 char = _{ !( WHITESPACE | "(" | ")" ) ~ ANY }
 preterminal = { open ~ node_label ~ terminal ~ close }
 terminal = @{ char+ }

@@ -353,7 +353,7 @@ mod tests {
     use petgraph::prelude::NodeIndex;
     use petgraph::stable_graph::StableGraph;
 
-    use crate::io::{PTBFormat, PTBLineFormat, PTBTreeIter, ReadTree, WriteTree};
+    use crate::io::{ptb::{PTBFormat, PTBLineFormat, PTBTreeIter}, ReadTree, WriteTree};
     use crate::node::TerminalBuilder;
     use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
 
@@ -374,6 +374,13 @@ mod tests {
         let input = "(NX:edge (NN Nounphrase) (PX:edge (PP on) (NX:another (DET a ) \
                      (ADJ single) (NX line))))";
         PTBFormat::TueBa.string_to_tree(input).unwrap();
+    }
+
+    #[test]
+    fn test_single_terminal() {
+        let input = "(T t)";
+        let t = PTBFormat::Simple.string_to_tree(input).unwrap();
+        assert_eq!(input, PTBFormat::Simple.tree_to_string(&t).unwrap())
     }
 
     #[test]
