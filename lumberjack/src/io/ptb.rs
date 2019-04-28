@@ -89,7 +89,7 @@ impl PTBFormat {
         let sent = sentence.graph();
 
         match &sent[position] {
-            Node::Terminal(terminal) => self.fmt_term(terminal.form(), terminal.pos(), edge),
+            Node::Terminal(terminal) => self.fmt_term(terminal.form(), terminal.label(), edge),
             Node::NonTerminal(nt) => {
                 let mut nodes: Vec<_> = sent
                     .edges_directed(position, Direction::Outgoing)
@@ -353,7 +353,10 @@ mod tests {
     use petgraph::prelude::NodeIndex;
     use petgraph::stable_graph::StableGraph;
 
-    use crate::io::{ptb::{PTBFormat, PTBLineFormat, PTBTreeIter}, ReadTree, WriteTree};
+    use crate::io::{
+        ptb::{PTBFormat, PTBLineFormat, PTBTreeIter},
+        ReadTree, WriteTree,
+    };
     use crate::node::TerminalBuilder;
     use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
 

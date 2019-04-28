@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
-use petgraph::prelude::{Bfs, Direction, EdgeRef, EdgeIndex, NodeIndex, StableGraph};
+use petgraph::prelude::{Bfs, Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
 
 use crate::util::LabelSet;
 use crate::{Edge, Node};

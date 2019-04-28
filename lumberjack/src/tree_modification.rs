@@ -24,7 +24,7 @@ impl AnnotatePOS for Tree {
         let mut pos_iter = pos_iter.into_iter();
         for terminal in terminals {
             if let Some(pos) = pos_iter.next() {
-                self[terminal].terminal_mut().unwrap().set_pos(pos);
+                self[terminal].terminal_mut().unwrap().set_label(pos);
             } else {
                 return Err(format_err!("Not enough POS tags were provided"));
             }

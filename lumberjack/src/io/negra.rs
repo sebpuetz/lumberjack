@@ -198,13 +198,13 @@ fn process_nonterminal(pair: Pair<Rule>) -> Result<(usize, usize, Edge, NTBuilde
     parts.next();
     let mut label_parts = parts.next().unwrap().as_str().split('=');
     let label = label_parts.next().unwrap();
-    let annotation = label_parts.next().map(|s| s.into());
+    let annotation = label_parts.next().map(|s| s.to_owned());
     //other
     parts.next();
     let edge = parts.next().unwrap().as_str();
     let edge = if edge == "--" { None } else { Some(edge) };
     let parent_id = parts.next().unwrap().as_str().parse::<usize>()?;
-    let ntbuilder = NTBuilder::new(label).annotation::<String>(annotation);
+    let ntbuilder = NTBuilder::new(label).annotation(annotation);
     Ok((parent_id, self_id, edge.into(), ntbuilder))
 }
 

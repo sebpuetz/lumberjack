@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::HashSet;
 
-use petgraph::prelude::{Direction, NodeIndex};
+use petgraph::prelude::{Direction, EdgeIndex, NodeIndex};
 
 use crate::Tree;
 
@@ -34,6 +34,21 @@ impl Climber {
             None
         }
     }
+
+    /// Moves up the tree by following the first incoming edge.
+    ///
+    /// This method behaves like an iterator, returning `Some(NodeIndex)` before reaching the final
+    /// state. Calling this method again in the final state will return `None`.
+    ///
+    /// Returns a tuple of `(NodeIndex, EdgeIndex)` where `NodeIndex` is the parent node's index
+    /// and `EdgeIndex` is the incoming edge`s index.
+    pub fn next_with_edge(&mut self, tree: &Tree) -> Option<(NodeIndex, EdgeIndex)> {
+        let ret = tree.parent(self.cur);
+        if let Some((node, _)) = ret {
+            self.cur = node;
+        };
+        ret
+    }
 }
 
 /// LabelSet.
@@ -62,8 +77,8 @@ impl LabelSet {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::util::{LabelSet, Climber};
     use crate::io::{PTBFormat, ReadTree};
+    use crate::util::{Climber, LabelSet};
 
     #[test]
     fn label_set_test() {

@@ -63,6 +63,24 @@ impl Node {
         }
     }
 
+    /// Get the node's label.
+    ///
+    /// Returns the part-of-speech for `Terminal`s and the node label for `NonTerminal`s.
+    pub fn label(&self) -> &str {
+        match self {
+            Node::NonTerminal(nt) => nt.label(),
+            Node::Terminal(t) => t.label(),
+        }
+    }
+
+    /// Set the node's label.
+    pub(crate) fn set_label(&mut self, s: impl Into<String>) -> String {
+        match self {
+            Node::NonTerminal(nt) => nt.set_label(s),
+            Node::Terminal(t) => t.set_label(s),
+        }
+    }
+
     /// Get a `Node`'s span.
     pub fn span(&self) -> &Span {
         match self {
@@ -103,10 +121,7 @@ pub struct NonTerminal {
 }
 
 impl NonTerminal {
-    pub(crate) fn new<S>(label: S, span: Span) -> Self
-    where
-        S: Into<String>,
-    {
+    pub(crate) fn new(label: impl Into<String>, span: Span) -> Self {
         NonTerminal {
             label: label.into(),
             annotation: None,
@@ -129,10 +144,7 @@ impl NonTerminal {
     }
 
     /// Return old label and replace with `label`.
-    pub fn set_label<S>(&mut self, label: S) -> String
-    where
-        S: Into<String>,
-    {
+    pub fn set_label(&mut self, label: impl Into<String>) -> String {
         mem::replace(&mut self.label, label.into())
     }
 
@@ -142,11 +154,14 @@ impl NonTerminal {
     }
 
     /// Return old annotation and replace with `annotation`.
-    pub fn set_annotation<S>(&mut self, annotation: Option<S>) -> Option<String>
-    where
-        S: Into<String>,
-    {
+    pub fn set_annotation(&mut self, annotation: Option<impl Into<String>>) -> Option<String> {
         mem::replace(&mut self.annotation, annotation.map(Into::into))
+    }
+}
+
+impl fmt::Display for NonTerminal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.label)
     }
 }
 
@@ -158,10 +173,7 @@ pub(crate) struct NTBuilder {
 }
 
 impl NTBuilder {
-    pub(crate) fn new<S>(label: S) -> Self
-    where
-        S: Into<String>,
-    {
+    pub(crate) fn new(label: impl Into<String>) -> Self {
         NTBuilder {
             label: label.into(),
             annotation: None,
@@ -174,10 +186,7 @@ impl NTBuilder {
         self
     }
 
-    pub(crate) fn annotation<S>(mut self, annotation: Option<S>) -> Self
-    where
-        S: Into<String>,
-    {
+    pub(crate) fn annotation(mut self, annotation: Option<impl Into<String>>) -> Self {
         self.annotation = annotation.map(Into::into);
         self
     }
@@ -216,10 +225,7 @@ pub struct Terminal {
 
 impl Terminal {
     #[allow(dead_code)]
-    pub(crate) fn new<S>(form: S, pos: S, span: Span) -> Self
-    where
-        S: Into<String>,
-    {
+    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, span: Span) -> Self {
         Terminal {
             form: form.into(),
             pos: pos.into(),
@@ -243,23 +249,17 @@ impl Terminal {
     }
 
     /// Replace form with `new_form`. Return old value.
-    pub fn set_form<S>(&mut self, new_form: S) -> String
-    where
-        S: Into<String>,
-    {
+    pub fn set_form(&mut self, new_form: impl Into<String>) -> String {
         mem::replace(&mut self.form, new_form.into())
     }
 
     /// Return part of speech.
-    pub fn pos(&self) -> &str {
+    pub fn label(&self) -> &str {
         self.pos.as_str()
     }
 
     /// Replace part of speech with `new_pos`. Return old value.
-    pub fn set_pos<S>(&mut self, new_pos: S) -> String
-    where
-        S: Into<String>,
-    {
+    pub fn set_label(&mut self, new_pos: impl Into<String>) -> String {
         mem::replace(&mut self.pos, new_pos.into())
     }
 
@@ -269,10 +269,7 @@ impl Terminal {
     }
 
     /// Replace lemma with `new_lemma`. Return old value.
-    pub fn set_lemma<S>(&mut self, new_lemma: Option<S>) -> Option<String>
-    where
-        S: Into<String>,
-    {
+    pub fn set_lemma(&mut self, new_lemma: Option<impl Into<String>>) -> Option<String> {
         mem::replace(&mut self.lemma, new_lemma.map(Into::into))
     }
 
@@ -282,11 +279,14 @@ impl Terminal {
     }
 
     /// Replace morphological features with `new_morph`. Return old value.
-    pub fn set_morph<S>(&mut self, new_morph: Option<S>) -> Option<String>
-    where
-        S: Into<String>,
-    {
+    pub fn set_morph(&mut self, new_morph: Option<impl Into<String>>) -> Option<String> {
         mem::replace(&mut self.morph, new_morph.map(Into::into))
+    }
+}
+
+impl fmt::Display for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {}", self.pos, self.form)
     }
 }
 
@@ -301,10 +301,7 @@ pub(crate) struct TerminalBuilder {
 
 #[allow(dead_code)]
 impl TerminalBuilder {
-    pub fn new<S>(form: S, pos: S, span: Span) -> Self
-    where
-        S: Into<String>,
-    {
+    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, span: Span) -> Self {
         TerminalBuilder {
             form: form.into(),
             pos: pos.into(),
@@ -331,18 +328,12 @@ impl TerminalBuilder {
         })
     }
 
-    pub fn lemma<S>(mut self, lemma: S) -> TerminalBuilder
-    where
-        S: Into<String>,
-    {
+    pub fn lemma(mut self, lemma: impl Into<String>) -> TerminalBuilder {
         self.lemma = Some(lemma.into());
         self
     }
 
-    pub fn morph<S>(mut self, morph: S) -> TerminalBuilder
-    where
-        S: Into<String>,
-    {
+    pub fn morph(mut self, morph: impl Into<String>) -> TerminalBuilder {
         self.morph = Some(morph.into());
         self
     }
@@ -365,13 +356,13 @@ mod tests {
         let terminal = builder.try_into_terminal()?;
 
         assert_eq!(form, terminal.form());
-        assert_eq!(pos, terminal.pos());
+        assert_eq!(pos, terminal.label());
         assert_eq!(Some(lemma), terminal.lemma());
         assert_eq!(None, terminal.morph());
 
         let terminal2 = Terminal::new(form, pos, span);
         assert_eq!(form, terminal2.form());
-        assert_eq!(pos, terminal2.pos());
+        assert_eq!(pos, terminal2.label());
         Ok(())
     }
 
