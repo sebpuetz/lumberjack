@@ -293,19 +293,19 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn terminal_invalid_cont_span_2_1() {
+    fn invalid_cont_span_2_1() {
         Span::new_continuous(2, 1);
     }
 
     #[test]
     #[should_panic]
-    fn terminal_invalid_skip_span_2_1() {
+    fn invalid_skip_span_2_1() {
         Span::new_continuous(2, 1);
     }
 
     #[test]
     #[should_panic]
-    fn terminal_invalid_skip_full_span() {
+    fn invalid_skip_full_span() {
         let mut skip = HashSet::new();
         skip.insert(0);
         skip.insert(1);
@@ -317,9 +317,10 @@ mod tests {
         let mut skip = HashSet::new();
         skip.insert(1);
         skip.insert(2);
-        let span = SkipSpan::new(0, 4, skip);
-        assert_eq!(span.lower, 0);
-        assert_eq!(span.upper, 4);
+        let span = Span::Discontinuous(SkipSpan::new(0, 4, skip));
+        assert_eq!(span.lower(), 0);
+        assert_eq!(span.upper(), 4);
+        assert_eq!(span.bounds(), (0, 4));
         assert_eq!(span.into_iter().collect::<Vec<_>>(), vec![0, 3]);
     }
 
@@ -340,6 +341,17 @@ mod tests {
     #[test]
     fn contains_contspan() {
         let span = ContinuousSpan::new(0, 10);
+        assert!(span.contains(0));
+        assert!(span.contains(1));
+        assert!(span.contains(2));
+        assert!(span.contains(4));
+        assert!(span.contains(6));
+        assert!(!span.contains(10))
+    }
+
+    #[test]
+    fn contains_span() {
+        let span = Span::new_continuous(0, 10);
         assert!(span.contains(0));
         assert!(span.contains(1));
         assert!(span.contains(2));

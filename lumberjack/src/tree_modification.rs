@@ -356,7 +356,7 @@ mod tests {
 
     use super::{AnnotatePOS, TreeOps};
     use crate::io::{PTBFormat, ReadTree, WriteTree};
-    use crate::tree_modification::LabelSet;
+    use crate::util::LabelSet;
     use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
