@@ -15,6 +15,12 @@ pub enum Span {
     Discontinuous(SkipSpan),
 }
 
+impl From<usize> for Span {
+    fn from(idx: usize) -> Self {
+        Span::new_continuous(idx, idx + 1)
+    }
+}
+
 impl Clone for Span {
     fn clone(&self) -> Self {
         match self {

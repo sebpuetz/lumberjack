@@ -74,7 +74,9 @@ impl Node {
     }
 
     /// Set the node's label.
-    pub(crate) fn set_label(&mut self, s: impl Into<String>) -> String {
+    ///
+    /// Returns the replaced label.
+    pub fn set_label(&mut self, s: impl Into<String>) -> String {
         match self {
             Node::NonTerminal(nt) => nt.set_label(s),
             Node::Terminal(t) => t.set_label(s),
@@ -121,16 +123,28 @@ pub struct NonTerminal {
 }
 
 impl NonTerminal {
-    pub(crate) fn new(label: impl Into<String>, span: Span) -> Self {
+    pub(crate) fn new(label: impl Into<String>, span: impl Into<Span>) -> Self {
         NonTerminal {
             label: label.into(),
             annotation: None,
-            span,
+            span: span.into(),
         }
     }
 
-    pub(crate) fn set_span(&mut self, span: Span) {
-        mem::replace(&mut self.span, span);
+    pub(crate) fn new_with_annotation(
+        label: impl Into<String>,
+        annotation: Option<impl Into<String>>,
+        span: impl Into<Span>,
+    ) -> Self {
+        NonTerminal {
+            label: label.into(),
+            annotation: annotation.map(Into::into),
+            span: span.into(),
+        }
+    }
+
+    pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Span {
+        mem::replace(&mut self.span, span.into())
     }
 
     /// Get the `NonTerminal`'s span.
@@ -165,47 +179,6 @@ impl fmt::Display for NonTerminal {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct NTBuilder {
-    label: String,
-    annotation: Option<String>,
-    span: Option<Span>,
-}
-
-impl NTBuilder {
-    pub(crate) fn new(label: impl Into<String>) -> Self {
-        NTBuilder {
-            label: label.into(),
-            annotation: None,
-            span: None,
-        }
-    }
-
-    pub(crate) fn span(mut self, span: Span) -> Self {
-        self.span = Some(span);
-        self
-    }
-
-    pub(crate) fn annotation(mut self, annotation: Option<impl Into<String>>) -> Self {
-        self.annotation = annotation.map(Into::into);
-        self
-    }
-
-    pub(crate) fn try_into_nt(self) -> Result<NonTerminal, Error> {
-        if let Some(span) = self.span {
-            Ok(NonTerminal {
-                label: self.label,
-                span,
-                annotation: self.annotation,
-            })
-        } else {
-            Err(format_err!(
-                "Could not convert into NonTerminal, missing span"
-            ))
-        }
-    }
-}
-
 /// Struct representing a Terminal.
 ///
 /// `Terminal`s are represented by:
@@ -224,14 +197,13 @@ pub struct Terminal {
 }
 
 impl Terminal {
-    #[allow(dead_code)]
-    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, span: Span) -> Self {
+    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, idx: usize) -> Self {
         Terminal {
             form: form.into(),
             pos: pos.into(),
             lemma: None,
             morph: None,
-            span,
+            span: idx.into(),
         }
     }
 
@@ -290,107 +262,60 @@ impl fmt::Display for Terminal {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TerminalBuilder {
-    form: String,
-    pos: String,
-    span: Span,
-    lemma: Option<String>,
-    morph: Option<String>,
-}
-
-#[allow(dead_code)]
-impl TerminalBuilder {
-    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, span: Span) -> Self {
-        TerminalBuilder {
-            form: form.into(),
-            pos: pos.into(),
-            span,
-            lemma: None,
-            morph: None,
-        }
-    }
-
-    pub fn try_into_terminal(self) -> Result<Terminal, Error> {
-        if self.span.lower() != self.span.upper() - 1 {
-            return Err(format_err!(
-                "Span of terminal has to be of length 1: ({},{})",
-                self.span.lower(),
-                self.span.upper()
-            ));
-        }
-        Ok(Terminal {
-            form: self.form,
-            pos: self.pos,
-            span: self.span,
-            lemma: self.lemma,
-            morph: self.morph,
-        })
-    }
-
-    pub fn lemma(mut self, lemma: impl Into<String>) -> TerminalBuilder {
-        self.lemma = Some(lemma.into());
-        self
-    }
-
-    pub fn morph(mut self, morph: impl Into<String>) -> TerminalBuilder {
-        self.morph = Some(morph.into());
-        self
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use failure::Error;
-
-    use crate::node::{NTBuilder, TerminalBuilder};
-    use crate::{NonTerminal, Span, Terminal};
+mod test {
+    use crate::{Node, NonTerminal, Span, Terminal};
 
     #[test]
-    fn terminal_builder() -> Result<(), Error> {
-        let form = "test_form";
-        let pos = "test_pos";
-        let lemma = "lemma";
-        let span = Span::new_continuous(0, 1);
-        let builder = TerminalBuilder::new(form, pos, span.clone()).lemma(lemma);
-        let terminal = builder.try_into_terminal()?;
-
-        assert_eq!(form, terminal.form());
-        assert_eq!(pos, terminal.label());
-        assert_eq!(Some(lemma), terminal.lemma());
-        assert_eq!(None, terminal.morph());
-
-        let terminal2 = Terminal::new(form, pos, span);
-        assert_eq!(form, terminal2.form());
-        assert_eq!(pos, terminal2.label());
-        Ok(())
+    fn node_terminal() {
+        let mut terminal = Node::Terminal(Terminal::new("form", "pos", 0));
+        assert!(terminal.is_terminal());
+        assert!(terminal.terminal().is_some());
+        assert!(terminal.nonterminal().is_none());
+        assert!(terminal.extend_span().is_err());
+        assert_eq!(terminal.set_label("other_pos"), "pos");
+        assert_eq!(terminal.label(), "other_pos");
+        assert_eq!(
+            terminal.terminal_mut().unwrap().set_morph(Some("morph")),
+            None
+        );
+        assert_eq!(terminal.terminal().unwrap().morph(), Some("morph"));
+        assert_eq!(
+            terminal.terminal_mut().unwrap().set_lemma(Some("lemma")),
+            None
+        );
+        assert_eq!(terminal.terminal().unwrap().lemma(), Some("lemma"));
+        assert_eq!(
+            terminal.terminal_mut().unwrap().set_form("other_form"),
+            "form"
+        );
+        assert_eq!(terminal.terminal().unwrap().form(), "other_form");
+        assert_eq!(format!("{}", terminal), "other_pos other_form")
     }
 
     #[test]
-    fn nt_builder() -> Result<(), Error> {
-        let label = "test_label";
-        let span = Span::new_continuous(0, 2);
-        let nt = NTBuilder::new(label).span(span.clone()).try_into_nt()?;
-        assert_eq!(label, nt.label());
-        assert_eq!(*nt.span(), span);
-        Ok(())
-    }
-
-    #[test]
-    #[should_panic]
-    fn nt_builder_fail() {
-        let label = "test_label";
-        let _nt: NonTerminal = NTBuilder::new(label).try_into_nt().unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn terminal_invalid_span_too_big() {
-        let form = "test_form";
-        let pos = "test_pos";
-        let lemma = "lemma";
-        let span = Span::new_continuous(0, 2);
-        let builder = TerminalBuilder::new(form, pos, span).lemma(lemma);
-        let _terminal = builder.try_into_terminal().unwrap();
+    fn node_nonterminal() {
+        let mut nonterminal = Node::NonTerminal(NonTerminal::new("label", 0));
+        assert!(!nonterminal.is_terminal());
+        assert_eq!(nonterminal.terminal(), None);
+        assert!(nonterminal.nonterminal().is_some());
+        assert_eq!(nonterminal.set_label("other_label"), "label");
+        assert_eq!(nonterminal.label(), "other_label");
+        assert_eq!(nonterminal.nonterminal_mut().unwrap().set_span(3), 0.into());
+        assert_eq!(nonterminal.span(), &3.into());
+        nonterminal.extend_span().unwrap();
+        assert_eq!(nonterminal.span(), &Span::new_continuous(3, 5));
+        assert_eq!(
+            nonterminal
+                .nonterminal_mut()
+                .unwrap()
+                .set_annotation(Some("annotation")),
+            None
+        );
+        assert_eq!(
+            nonterminal.nonterminal_mut().unwrap().annotation(),
+            Some("annotation")
+        );
+        assert_eq!(format!("{}", nonterminal), "other_label")
     }
 }

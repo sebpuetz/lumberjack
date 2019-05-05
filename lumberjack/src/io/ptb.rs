@@ -6,8 +6,7 @@ use pest::Parser;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 
 use crate::io::{ReadTree, WriteTree};
-use crate::node::{NTBuilder, TerminalBuilder};
-use crate::{Edge, Node, Projectivity, Span, Tree};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
 /// `PTBFormat`
 pub enum PTBFormat {
@@ -61,13 +60,13 @@ struct PTBParser;
 impl ReadTree for PTBFormat {
     fn string_to_tree(&self, string: &str) -> Result<Tree, Error> {
         let mut graph = StableGraph::new();
-        let mut terminals = Vec::new();
+        let mut n_terminals = 0;
         let mut parsed_line = PTBParser::parse(Rule::tree, string)?;
         let (_, root, _) =
-            self.parse_value(parsed_line.next().unwrap(), &mut graph, &mut terminals)?;
+            self.parse_value(parsed_line.next().unwrap(), &mut graph, &mut n_terminals)?;
         Ok(Tree::new(
             graph,
-            terminals.len(),
+            n_terminals,
             root,
             Projectivity::Projective,
         ))
@@ -149,50 +148,37 @@ impl PTBFormat {
         &self,
         pair: Pair<Rule>,
         g: &mut StableGraph<Node, Edge>,
-        terminals: &mut Vec<NodeIndex>,
+        terminals: &mut usize,
     ) -> Result<(Span, NodeIndex, Edge), Error> {
         match pair.as_rule() {
             Rule::nonterminal => {
                 let mut pairs = pair.into_inner();
                 // first rule after matching nonterminal will always be the label of the inner node
                 let (label, edge, annotation) = self.process_label(pairs.next().unwrap())?;
-
+                let nt = NonTerminal::new_with_annotation(label, annotation, 0);
+                let nt_idx = g.add_node(Node::NonTerminal(nt));
                 // collect children
-                let mut spans = Vec::new();
-                let mut children = Vec::new();
-                for inner_pair in pairs {
+                let mut lower = 0;
+                let mut upper = 0;
+                for (idx, inner_pair) in pairs.enumerate() {
                     let (span, child_idx, edge) = self.parse_value(inner_pair, g, terminals)?;
-                    spans.push(span);
-                    children.push((child_idx, edge));
+                    if idx == 0 {
+                        lower = span.lower();
+                    }
+                    upper = span.upper();
+                    g.add_edge(nt_idx, child_idx, edge);
                 }
+                let span = Span::new_continuous(lower, upper);
+                g[nt_idx].nonterminal_mut().unwrap().set_span(span.clone());
 
-                // safe to unwrap as the grammar rejects strings with Nonterminals without child nodes
-                // first.0 is lowest idx covered, last.1 highest idx
-                let span = Span::new_continuous(
-                    spans.first().unwrap().lower(),
-                    spans.last().unwrap().upper(),
-                );
-                let nt = NTBuilder::new(label)
-                    .span(span.clone())
-                    .annotation(annotation);
-                let node = Node::NonTerminal(nt.try_into_nt()?);
-                let idx = g.add_node(node);
-                for (child_idx, edge) in children {
-                    g.add_edge(idx, child_idx, edge);
-                }
-                Ok((span, idx, edge.into()))
+                Ok((span, nt_idx, edge.into()))
             }
             Rule::preterminal => {
-                let n_terminals = terminals.len();
                 let (edge, pos, form) = self.process_preterminal(pair)?;
-                let span = Span::new_continuous(n_terminals, n_terminals + 1);
-
-                let terminal = Node::Terminal(
-                    TerminalBuilder::new(form, pos, span.clone()).try_into_terminal()?,
-                );
-                let idx = g.add_node(terminal);
-                terminals.push(idx);
-                Ok((span, idx, edge.into()))
+                let term_idx = g.add_node(Node::Terminal(Terminal::new(form, pos, *terminals)));
+                let span = Span::from(*terminals);
+                *terminals += 1;
+                Ok((span, term_idx, edge.into()))
             }
             _ => {
                 eprintln!("{:?}", pair);
@@ -349,7 +335,6 @@ mod tests {
     use std::fs::File;
     use std::io::BufReader;
 
-    use failure::Error;
     use petgraph::prelude::NodeIndex;
     use petgraph::stable_graph::StableGraph;
 
@@ -357,8 +342,7 @@ mod tests {
         ptb::{PTBFormat, PTBLineFormat, PTBTreeIter},
         ReadTree, WriteTree,
     };
-    use crate::node::TerminalBuilder;
-    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
+    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
     pub fn test_multiline() {
@@ -393,34 +377,30 @@ mod tests {
     }
 
     #[test]
-    pub fn readable_test() -> Result<(), Error> {
+    pub fn readable_test() {
         let l = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (SEC:label (TERM1 t1)) (TERM t))";
         let mut cmp_graph = StableGraph::new();
 
-        let span1 = Span::new_continuous(0, 1);
-        let term1 = TerminalBuilder::new("t1", "TERM1", span1);
-        let term1 = cmp_graph.add_node(Node::Terminal(term1.try_into_terminal()?));
+        let term1 = Terminal::new("t1", "TERM1", 0);
+        let term1 = cmp_graph.add_node(Node::Terminal(term1));
 
-        let span2 = Span::new_continuous(1, 2);
-        let term2 = TerminalBuilder::new("t2", "TERM2", span2);
-        let term2 = cmp_graph.add_node(Node::Terminal(term2.try_into_terminal()?));
+        let term2 = Terminal::new("t2", "TERM2", 1);
+        let term2 = cmp_graph.add_node(Node::Terminal(term2));
 
         let nt = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
         let first = cmp_graph.add_node(Node::NonTerminal(nt));
         cmp_graph.add_edge(first, term1, Edge::default());
         cmp_graph.add_edge(first, term2, Edge::default());
 
-        let span3 = Span::new_continuous(2, 3);
-        let term3 = TerminalBuilder::new("t1", "TERM1", span3);
-        let term3 = cmp_graph.add_node(Node::Terminal(term3.try_into_terminal()?));
+        let term3 = Terminal::new("t1", "TERM1", 2);
+        let term3 = cmp_graph.add_node(Node::Terminal(term3));
 
         let nt2 = NonTerminal::new("SEC", Span::new_continuous(2, 3));
         let sec = cmp_graph.add_node(Node::NonTerminal(nt2));
         cmp_graph.add_edge(sec, term3, Edge::default());
 
-        let span4 = Span::new_continuous(3, 4);
-        let term4 = TerminalBuilder::new("t", "TERM", span4);
-        let term4 = cmp_graph.add_node(Node::Terminal(term4.try_into_terminal()?));
+        let term4 = Terminal::new("t", "TERM", 3);
+        let term4 = cmp_graph.add_node(Node::Terminal(term4));
 
         let root = NonTerminal::new("ROOT", Span::new_continuous(0, 4));
         let root = cmp_graph.add_node(Node::NonTerminal(root));
@@ -429,11 +409,10 @@ mod tests {
         cmp_graph.add_edge(root, sec, Edge::from(Some("label")));
         cmp_graph.add_edge(root, term4, Edge::default());
         let tree2 = Tree::new(cmp_graph, 4, NodeIndex::new(6), Projectivity::Projective);
-        let tree = PTBFormat::TueBa.string_to_tree(l)?;
+        let tree = PTBFormat::TueBa.string_to_tree(l).unwrap();
         assert_eq!(tree, tree2);
 
         assert_eq!(4, tree.n_terminals());
-        Ok(())
     }
 
     #[test]

@@ -6,8 +6,7 @@ use pest::iterators::Pair;
 use pest::Parser;
 use petgraph::stable_graph::StableGraph;
 
-use crate::node::{NTBuilder, TerminalBuilder};
-use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
 /// Iterator over constituency trees in a NEGRA export file.
 ///
@@ -123,7 +122,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                 n_terminals += 1;
             }
             Rule::nonterminal => {
-                let (parent, self_id, edge, nonterminal) = process_nonterminal(pair)?;
+                let (parent, self_id, edge, mut nonterminal) = process_nonterminal(pair)?;
                 let mut coverage = Vec::new();
                 // following nodes are higher in the tree, nonterminal is finished, just add all edges
                 let edge_list = edges.remove(&self_id).ok_or_else(|| {
@@ -139,10 +138,10 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                 if span.discontinuous().is_some() {
                     projectivity = Projectivity::Nonprojective;
                 }
-                let nt = nonterminal.span(span).try_into_nt()?;
+                nonterminal.set_span(span);
 
                 // add nonterminal and outgoing edges to graph
-                let idx = graph.add_node(Node::NonTerminal(nt));
+                let idx = graph.add_node(Node::NonTerminal(nonterminal));
                 for (edge, node) in edge_list {
                     graph.add_edge(idx, node, edge);
                 }
@@ -184,7 +183,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
 
 // returns a tuple of parent_id, own_id, parent_edge, ntbuilder
 // NTBuilder is returned rather than NonTerminal because span depends on other nodes.
-fn process_nonterminal(pair: Pair<Rule>) -> Result<(usize, usize, Edge, NTBuilder), Error> {
+fn process_nonterminal(pair: Pair<Rule>) -> Result<(usize, usize, Edge, NonTerminal), Error> {
     // nonterminal rule is defined as:
     // ID ~ other ~ label ~ other ~ edge_label ~ ID ~ consume_line? ~ NEWLINE
     // thus safe to unwrap up to second ID as the rule would not match otherwise
@@ -198,14 +197,14 @@ fn process_nonterminal(pair: Pair<Rule>) -> Result<(usize, usize, Edge, NTBuilde
     parts.next();
     let mut label_parts = parts.next().unwrap().as_str().split('=');
     let label = label_parts.next().unwrap();
-    let annotation = label_parts.next().map(|s| s.to_owned());
+    let annotation = label_parts.next().map(ToOwned::to_owned);
     //other
     parts.next();
     let edge = parts.next().unwrap().as_str();
     let edge = if edge == "--" { None } else { Some(edge) };
     let parent_id = parts.next().unwrap().as_str().parse::<usize>()?;
-    let ntbuilder = NTBuilder::new(label).annotation(annotation);
-    Ok((parent_id, self_id, edge.into(), ntbuilder))
+    let nt = NonTerminal::new_with_annotation(label, annotation, 0);
+    Ok((parent_id, self_id, edge.into(), nt))
 }
 
 // returns parent_id, parent_edge, terminal
@@ -227,17 +226,13 @@ fn process_terminal(pair: Pair<Rule>, idx: usize) -> Result<(usize, Edge, Node),
     // unlabeled edges denoted as "--" in tueba
     let edge = if edge == "--" { None } else { Some(edge) };
     let parent_id = parts.next().unwrap().as_str().parse::<usize>()?;
-    let span = Span::new_continuous(idx, idx + 1);
-    let mut builder = TerminalBuilder::new(form, pos, span).lemma(lemma);
+    let mut terminal = Terminal::new(form, pos, idx);
+    terminal.set_lemma(Some(lemma));
     if morph != "--" {
-        builder = builder.morph(morph);
+        terminal.set_morph(Some(morph));
     }
 
-    Ok((
-        parent_id,
-        edge.into(),
-        Node::Terminal(builder.try_into_terminal()?),
-    ))
+    Ok((parent_id, edge.into(), Node::Terminal(terminal)))
 }
 
 #[cfg(test)]
@@ -294,19 +289,19 @@ mod tests {
         let br = BufReader::new(f);
         let tree = NegraTreeIter::new(br).next().unwrap().unwrap();
         let mut g = StableGraph::new();
-        let mut v = Terminal::new("V", "VVFIN", Span::new_continuous(0, 1));
+        let mut v = Terminal::new("V", "VVFIN", 0);
         v.set_lemma(Some("v"));
         v.set_morph(Some("3sit"));
-        let mut d = Terminal::new("d", "ART", Span::new_continuous(1, 2));
+        let mut d = Terminal::new("d", "ART", 1);
         d.set_lemma(Some("d"));
         d.set_morph(Some("nsf"));
-        let mut a = Terminal::new("A", "NN", Span::new_continuous(2, 3));
+        let mut a = Terminal::new("A", "NN", 2);
         a.set_lemma(Some("a"));
         a.set_morph(Some("nsf"));
-        let mut s = Terminal::new("S", "NN", Span::new_continuous(3, 4));
+        let mut s = Terminal::new("S", "NN", 3);
         s.set_lemma(Some("s"));
         s.set_morph(Some("asn"));
-        let mut punct = Terminal::new("?", "$.", Span::new_continuous(4, 5));
+        let mut punct = Terminal::new("?", "$.", 4);
         punct.set_lemma(Some("?"));
 
         let mf = g.add_node(Node::NonTerminal(NonTerminal::new(
@@ -380,7 +375,7 @@ mod tests {
         let (parent_id, edge, terminal) = process_terminal(v.next().unwrap(), 0).unwrap();
         assert_eq!(parent_id, 502);
         assert_eq!(edge, Edge::from(Some("HD")));
-        let mut term = Terminal::new("was", "PIS", Span::new_continuous(0, 1));
+        let mut term = Terminal::new("was", "PIS", 0);
         term.set_lemma(Some("etwas"));
         term.set_morph(Some("***"));
         assert_eq!(terminal, Node::Terminal(term));
@@ -394,14 +389,13 @@ mod tests {
     fn nonterminal() {
         let nt = "#502			--			NX	--		ON	503\n";
         let mut v = NEGRAParser::parse(Rule::nonterminal, nt).unwrap();
-        let (parent_id, own_id, edge, ntbuilder) = process_nonterminal(v.next().unwrap()).unwrap();
-        let span = Span::new_continuous(0, 1);
-        let ntbuilder = ntbuilder.span(span.clone());
+        let (parent_id, own_id, edge, mut nt) = process_nonterminal(v.next().unwrap()).unwrap();
+        nt.set_span(0);
         assert_eq!(parent_id, 503);
         assert_eq!(own_id, 502);
         assert_eq!(edge, Edge::from(Some("ON")));
-        let nt = NonTerminal::new("NX", span);
-        assert_eq!(ntbuilder.try_into_nt().unwrap(), nt);
+        let target = NonTerminal::new("NX", 0);
+        assert_eq!(nt, target);
     }
 
     #[test]

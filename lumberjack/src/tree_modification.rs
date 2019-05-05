@@ -42,8 +42,8 @@ impl AnnotatePOS for Tree {
 pub trait TreeOps {
     /// Insert an intermediate node above terminals.
     ///
-    /// If a terminal is not dominated by a node with label in `tag_set` a new non-terminal node
-    /// is inserted above with a specified label. Runs of terminals whose parent node is not
+    /// If a terminal is not dominated by a node with label matched by `tag_set` a new non-terminal
+    /// node is inserted above with a specified label. Runs of terminals whose parent node is not
     /// matched by `tag_set` are collected under a single new node.
     fn insert_intermediate(
         &mut self,
@@ -71,7 +71,7 @@ impl TreeOps for Tree {
                 .parent(terminal)
                 .ok_or_else(|| format_err!("Terminal without parent:\n{}", self[terminal]))?;
 
-            if tag_set.matches(self[parent].nonterminal().unwrap().label()) {
+            if tag_set.matches(self[parent].label()) {
                 continue;
             }
 
@@ -221,7 +221,7 @@ impl Projectivize for Tree {
                 self[attachment_point_candidate]
                     .nonterminal_mut()
                     .unwrap()
-                    .set_span(Span::new_continuous(span.lower(), span.upper()))
+                    .set_span(Span::new_continuous(span.lower(), span.upper()));
             }
             self.set_projectivity(Projectivity::Projective);
         }
@@ -268,19 +268,19 @@ mod tests {
         let third = NonTerminal::new("L", Span::new_continuous(3, 4));
         let third_idx = g.add_node(Node::NonTerminal(third));
         g.add_edge(root_idx, third_idx, Edge::default());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
+        let term1 = Terminal::new("t1", "TERM1", 0);
         let term1_idx = g.add_node(Node::Terminal(term1));
         g.add_edge(first_idx, term1_idx, Edge::default());
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
+        let term2 = Terminal::new("t2", "TERM1", 1);
         let term2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(second_idx, term2_idx, Edge::default());
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let term3_idx = g.add_node(Node::Terminal(term3));
         g.add_edge(first_idx, term3_idx, Edge::default());
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
+        let term4 = Terminal::new("t4", "TERM4", 3);
         let term4_idx = g.add_node(Node::Terminal(term4));
         g.add_edge(third_idx, term4_idx, Edge::default());
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
@@ -301,19 +301,19 @@ mod tests {
         let third = NonTerminal::new("L", Span::new_continuous(3, 4));
         let third_idx = g.add_node(Node::NonTerminal(third));
         g.add_edge(root_idx, third_idx, Edge::default());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
+        let term1 = Terminal::new("t1", "TERM1", 0);
         let term1_idx = g.add_node(Node::Terminal(term1));
         g.add_edge(first_idx, term1_idx, Edge::default());
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
+        let term2 = Terminal::new("t2", "TERM1", 1);
         let term2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(root_idx, term2_idx, Edge::default());
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let term3_idx = g.add_node(Node::Terminal(term3));
         g.add_edge(first_idx, term3_idx, Edge::default());
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
+        let term4 = Terminal::new("t4", "TERM4", 3);
         let term4_idx = g.add_node(Node::Terminal(term4));
         g.add_edge(third_idx, term4_idx, Edge::default());
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
         let target = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
@@ -331,19 +331,19 @@ mod tests {
         let second = NonTerminal::new("L1", Span::new_continuous(1, 2));
         let second_idx = g.add_node(Node::NonTerminal(second));
         g.add_edge(root_idx, second_idx, Edge::default());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
+        let term1 = Terminal::new("t1", "TERM1", 0);
         let term1_idx = g.add_node(Node::Terminal(term1));
         g.add_edge(root_idx, term1_idx, Edge::default());
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
+        let term2 = Terminal::new("t2", "TERM1", 1);
         let term2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(second_idx, term2_idx, Edge::default());
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let term3_idx = g.add_node(Node::Terminal(term3));
         g.add_edge(root_idx, term3_idx, Edge::default());
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
+        let term4 = Terminal::new("t4", "TERM4", 3);
         let term4_idx = g.add_node(Node::Terminal(term4));
         g.add_edge(root_idx, term4_idx, Edge::default());
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
         let target = Tree::new(g, 5, root_idx, Projectivity::Projective);
@@ -359,19 +359,19 @@ mod tests {
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
         g.add_edge(root_idx, first_idx, Edge::default());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
+        let term1 = Terminal::new("t1", "TERM1", 0);
         let term1_idx = g.add_node(Node::Terminal(term1));
         g.add_edge(first_idx, term1_idx, Edge::default());
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
+        let term2 = Terminal::new("t2", "TERM1", 1);
         let term2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(root_idx, term2_idx, Edge::default());
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let term3_idx = g.add_node(Node::Terminal(term3));
         g.add_edge(first_idx, term3_idx, Edge::default());
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
+        let term4 = Terminal::new("t4", "TERM4", 3);
         let term4_idx = g.add_node(Node::Terminal(term4));
         g.add_edge(root_idx, term4_idx, Edge::default());
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
         let mut set = HashSet::new();
@@ -393,19 +393,19 @@ mod tests {
         let second_unk = NonTerminal::new("UNK", Span::new_continuous(3, 5));
         let second_unk_idx = g.add_node(Node::NonTerminal(second_unk));
         g.add_edge(root_idx, second_unk_idx, Edge::default());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
+        let term1 = Terminal::new("t1", "TERM1", 0);
         let term1_idx = g.add_node(Node::Terminal(term1));
         g.add_edge(first_idx, term1_idx, Edge::default());
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
+        let term2 = Terminal::new("t2", "TERM1", 1);
         let term2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(first_unk_idx, term2_idx, Edge::default());
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let term3_idx = g.add_node(Node::Terminal(term3));
         g.add_edge(first_idx, term3_idx, Edge::default());
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
+        let term4 = Terminal::new("t4", "TERM4", 3);
         let term4_idx = g.add_node(Node::Terminal(term4));
         g.add_edge(second_unk_idx, term4_idx, Edge::default());
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(second_unk_idx, term5_idx, Edge::default());
         let target = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
@@ -417,12 +417,12 @@ mod tests {
         let mut g = StableGraph::new();
         let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
         let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
-        let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term1 = Terminal::new("t1", "TERM1", 0);
+        let term2 = Terminal::new("t2", "TERM1", 1);
+        let term3 = Terminal::new("t3", "TERM3", 2);
+        let second = NonTerminal::new("SECOND", 3);
+        let term4 = Terminal::new("t4", "TERM4", 3);
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first_idx = g.add_node(Node::NonTerminal(first));
         let term1_idx = g.add_node(Node::Terminal(term1));
@@ -452,12 +452,12 @@ mod tests {
         let mut g = StableGraph::new();
         let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
         let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
-        let term1 = Terminal::new("t1", "TERM1", Span::new_continuous(0, 1));
-        let term2 = Terminal::new("t2", "TERM1", Span::new_continuous(1, 2));
-        let term3 = Terminal::new("t3", "TERM3", Span::new_continuous(2, 3));
+        let term1 = Terminal::new("t1", "TERM1", 0);
+        let term2 = Terminal::new("t2", "TERM1", 1);
+        let term3 = Terminal::new("t3", "TERM3", 2);
         let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
-        let term4 = Terminal::new("t4", "TERM4", Span::new_continuous(3, 4));
-        let term5 = Terminal::new("t5", "TERM5", Span::new_continuous(4, 5));
+        let term4 = Terminal::new("t4", "TERM4", 3);
+        let term5 = Terminal::new("t5", "TERM5", 4);
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first_idx = g.add_node(Node::NonTerminal(first));
         let term1_idx = g.add_node(Node::Terminal(term1));
