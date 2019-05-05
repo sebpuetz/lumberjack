@@ -64,6 +64,11 @@ impl TreeOps for Tree {
         tag_set: &LabelSet,
         insertion_label: &str,
     ) -> Result<(), Error> {
+        // can't perform insertion tree with the only node being a terminal.
+        if self.graph().node_count() == 1 {
+            return Ok(())
+        }
+
         let terminals = self.terminals().collect::<Vec<_>>();
         let mut prev_attachment = None;
         for (position, terminal) in terminals.into_iter().enumerate() {
