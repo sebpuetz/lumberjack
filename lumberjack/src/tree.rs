@@ -115,6 +115,17 @@ impl Tree {
         }
     }
 
+    /// Set root of the tree.
+    ///
+    /// Panics if the new root index is invalid.
+    pub(crate) fn set_root(&mut self, new_root: NodeIndex) {
+        assert!(
+            self.graph.contains_node(new_root),
+            "New root node has to be present in the  graph."
+        );
+        self.root = new_root;
+    }
+
     /// Get an immutable reference to the underlying `StableGraph`.
     pub fn graph(&self) -> &StableGraph<Node, Edge> {
         &self.graph
