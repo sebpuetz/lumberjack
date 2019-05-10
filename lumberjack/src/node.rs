@@ -159,11 +159,25 @@ impl fmt::Display for Node {
 /// Struct representing a non terminal tree node.
 ///
 /// `NonTerminal`s are defined by their `label`, optional `annotation` and their covered `span`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq)]
 pub struct NonTerminal {
     label: String,
     features: Option<Features>,
     span: Span,
+}
+
+impl PartialEq<NonTerminal> for NonTerminal {
+    fn eq(&self, other: &NonTerminal) -> bool {
+        if self.label != other.label() || self.span != other.span {
+            return false;
+        }
+        match (&self.features, &other.features) {
+            (Some(f), Some(f_other)) => f == f_other,
+            (None, None) => true,
+            (Some(f), None) => f.inner().is_empty(),
+            (None, Some(f)) => f.inner().is_empty(),
+        }
+    }
 }
 
 impl NonTerminal {
@@ -233,13 +247,27 @@ impl fmt::Display for NonTerminal {
 /// * `lemma` - (optional) lemma
 /// * `morph` - (optional) morphological features
 /// * `span` - position in the sentence
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Terminal {
     form: String,
     pos: String,
     lemma: Option<String>,
     features: Option<Features>,
     span: Span,
+}
+
+impl PartialEq<Terminal> for Terminal {
+    fn eq(&self, other: &Terminal) -> bool {
+        if self.pos != other.pos || self.span != other.span || self.lemma != other.lemma {
+            return false;
+        }
+        match (&self.features, &other.features) {
+            (Some(f), Some(f_other)) => f == f_other,
+            (None, None) => true,
+            (Some(f), None) => f.inner().is_empty(),
+            (None, Some(f)) => f.inner().is_empty(),
+        }
+    }
 }
 
 impl Terminal {
