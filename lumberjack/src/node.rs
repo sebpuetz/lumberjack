@@ -3,7 +3,7 @@ use std::mem;
 
 use failure::Error;
 
-use crate::Span;
+use crate::{Features, Span};
 
 /// Enum representing Nodes in a constituency tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -83,6 +83,34 @@ impl Node {
         }
     }
 
+    /// Get this `Node`'s `Features`.
+    pub fn features(&self) -> Option<&Features> {
+        match self {
+            Node::NonTerminal(nt) => nt.features(),
+            Node::Terminal(t) => t.features(),
+        }
+    }
+
+    /// Get this `Node`'s `Features` mutably.
+    ///
+    /// This method initializes the features if they are `None`.
+    pub fn features_mut(&mut self) -> &mut Features {
+        match self {
+            Node::NonTerminal(nt) => nt.features_mut(),
+            Node::Terminal(t) => t.features_mut(),
+        }
+    }
+
+    /// Set this `NonTerminal`'s `Features`.
+    ///
+    /// Returns the replaced value.
+    pub fn set_features(&mut self, features: Option<Features>) -> Option<Features> {
+        match self {
+            Node::NonTerminal(nt) => nt.set_features(features),
+            Node::Terminal(t) => t.set_features(features),
+        }
+    }
+
     /// Get a `Node`'s span.
     pub fn span(&self) -> &Span {
         match self {
@@ -118,7 +146,7 @@ impl fmt::Display for Node {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NonTerminal {
     label: String,
-    annotation: Option<String>,
+    features: Option<Features>,
     span: Span,
 }
 
@@ -126,25 +154,37 @@ impl NonTerminal {
     pub(crate) fn new(label: impl Into<String>, span: impl Into<Span>) -> Self {
         NonTerminal {
             label: label.into(),
-            annotation: None,
-            span: span.into(),
-        }
-    }
-
-    pub(crate) fn new_with_annotation(
-        label: impl Into<String>,
-        annotation: Option<impl Into<String>>,
-        span: impl Into<Span>,
-    ) -> Self {
-        NonTerminal {
-            label: label.into(),
-            annotation: annotation.map(Into::into),
+            features: None,
             span: span.into(),
         }
     }
 
     pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Span {
         mem::replace(&mut self.span, span.into())
+    }
+
+    /// Get this `NonTerminal`'s `Features`.
+    pub fn features(&self) -> Option<&Features> {
+        self.features.as_ref()
+    }
+
+    /// Get this `NonTerminal`'s `Features` mutably.
+    ///
+    /// This method initializes the features if they are `None`.
+    pub fn features_mut(&mut self) -> &mut Features {
+        if let Some(ref mut features) = self.features {
+            features
+        } else {
+            self.features = Some(Features::default());
+            self.features.as_mut().unwrap()
+        }
+    }
+
+    /// Set this `NonTerminal`'s `Features`.
+    ///
+    /// Returns the replaced value.
+    pub fn set_features(&mut self, features: Option<Features>) -> Option<Features> {
+        mem::replace(&mut self.features, features)
     }
 
     /// Get the `NonTerminal`'s span.
@@ -160,16 +200,6 @@ impl NonTerminal {
     /// Return old label and replace with `label`.
     pub fn set_label(&mut self, label: impl Into<String>) -> String {
         mem::replace(&mut self.label, label.into())
-    }
-
-    /// Return annotation if present.
-    pub fn annotation(&self) -> Option<&str> {
-        self.annotation.as_ref().map(String::as_str)
-    }
-
-    /// Return old annotation and replace with `annotation`.
-    pub fn set_annotation(&mut self, annotation: Option<impl Into<String>>) -> Option<String> {
-        mem::replace(&mut self.annotation, annotation.map(Into::into))
     }
 }
 
@@ -192,7 +222,7 @@ pub struct Terminal {
     form: String,
     pos: String,
     lemma: Option<String>,
-    morph: Option<String>,
+    features: Option<Features>,
     span: Span,
 }
 
@@ -202,7 +232,7 @@ impl Terminal {
             form: form.into(),
             pos: pos.into(),
             lemma: None,
-            morph: None,
+            features: None,
             span: idx.into(),
         }
     }
@@ -235,24 +265,41 @@ impl Terminal {
         mem::replace(&mut self.pos, new_pos.into())
     }
 
+    /// Get this `Terminal`'s `Features`.
+    pub fn features(&self) -> Option<&Features> {
+        self.features.as_ref()
+    }
+
+    /// Get this `Terminal`'s `Features` mutably.
+    ///
+    /// This method initializes the features if they are `None`.
+    pub fn features_mut(&mut self) -> &mut Features {
+        if let Some(ref mut features) = self.features {
+            features
+        } else {
+            self.features = Some(Features::default());
+            self.features.as_mut().unwrap()
+        }
+    }
+
+    /// Set this `Terminal`'s `Features`.
+    ///
+    /// Returns the replaced value.
+    pub fn set_features(&mut self, features: Option<Features>) -> Option<Features> {
+        mem::replace(&mut self.features, features)
+    }
+
     /// Return lemma if present, else `None`.
     pub fn lemma(&self) -> Option<&str> {
         self.lemma.as_ref().map(String::as_str)
     }
 
     /// Replace lemma with `new_lemma`. Return old value.
-    pub fn set_lemma(&mut self, new_lemma: Option<impl Into<String>>) -> Option<String> {
+    pub fn set_lemma<S>(&mut self, new_lemma: Option<S>) -> Option<String>
+    where
+        S: Into<String>,
+    {
         mem::replace(&mut self.lemma, new_lemma.map(Into::into))
-    }
-
-    /// Return morphological features if present, else `None`.
-    pub fn morph(&self) -> Option<&str> {
-        self.morph.as_ref().map(String::as_str)
-    }
-
-    /// Replace morphological features with `new_morph`. Return old value.
-    pub fn set_morph(&mut self, new_morph: Option<impl Into<String>>) -> Option<String> {
-        mem::replace(&mut self.morph, new_morph.map(Into::into))
     }
 }
 
@@ -276,10 +323,16 @@ mod test {
         assert_eq!(terminal.set_label("other_pos"), "pos");
         assert_eq!(terminal.label(), "other_pos");
         assert_eq!(
-            terminal.terminal_mut().unwrap().set_morph(Some("morph")),
+            terminal
+                .terminal_mut()
+                .unwrap()
+                .set_features(Some("morph".into())),
             None
         );
-        assert_eq!(terminal.terminal().unwrap().morph(), Some("morph"));
+        assert_eq!(
+            terminal.terminal().unwrap().features(),
+            Some(&"morph".into())
+        );
         assert_eq!(
             terminal.terminal_mut().unwrap().set_lemma(Some("lemma")),
             None
@@ -309,12 +362,18 @@ mod test {
             nonterminal
                 .nonterminal_mut()
                 .unwrap()
-                .set_annotation(Some("annotation")),
+                .features_mut()
+                .insert("some", Some("feature")),
             None
         );
         assert_eq!(
-            nonterminal.nonterminal_mut().unwrap().annotation(),
-            Some("annotation")
+            nonterminal
+                .nonterminal_mut()
+                .unwrap()
+                .features()
+                .unwrap()
+                .get_val("some"),
+            Some("feature")
         );
         assert_eq!(format!("{}", nonterminal), "other_label")
     }

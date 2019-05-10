@@ -6,6 +6,8 @@ pub use ptb::{PTBFormat, PTBLineFormat, PTBTreeIter};
 use crate::tree::Tree;
 use failure::Error;
 
+pub(crate) static NODE_ANNOTATION_FEATURE_KEY: &str = "node_annotation";
+
 pub trait WriteTree {
     fn tree_to_string(&self, tree: &Tree) -> Result<String, Error>;
 }

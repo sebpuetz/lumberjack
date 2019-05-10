@@ -5,8 +5,8 @@ use pest::iterators::Pair;
 use pest::Parser;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 
-use crate::io::{ReadTree, WriteTree};
-use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+use crate::io::{ReadTree, WriteTree, NODE_ANNOTATION_FEATURE_KEY};
+use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
 /// `PTBFormat`
 pub enum PTBFormat {
@@ -100,7 +100,7 @@ impl PTBFormat {
                     span_1.cmp(&span_2)
                 });
                 let mut sub_tree_rep = Vec::with_capacity(nodes.len());
-                sub_tree_rep.push(self.fmt_inner(nt.label(), edge, nt.annotation()));
+                sub_tree_rep.push(self.fmt_inner(nt, edge));
                 sub_tree_rep.extend(nodes.into_iter().map(|edge_ref| {
                     self.format_sub_tree(sentence, edge_ref.target(), edge_ref.weight().label())
                 }));
@@ -110,8 +110,16 @@ impl PTBFormat {
         }
     }
 
-    fn fmt_inner(&self, label: &str, edge: Option<&str>, annotation: Option<&str>) -> String {
-        let mut representation = label.to_string();
+    fn fmt_inner(&self, nt: &NonTerminal, edge: Option<&str>) -> String {
+        let mut representation = nt.label().to_string();
+        let annotation = if let Some(annotation) = nt
+            .features()
+            .map(|f| f.get_val(NODE_ANNOTATION_FEATURE_KEY))
+        {
+            annotation
+        } else {
+            None
+        };
         match self {
             PTBFormat::PTB => {
                 if let Some(annotation) = annotation {
@@ -155,7 +163,13 @@ impl PTBFormat {
                 let mut pairs = pair.into_inner();
                 // first rule after matching nonterminal will always be the label of the inner node
                 let (label, edge, annotation) = self.process_label(pairs.next().unwrap())?;
-                let nt = NonTerminal::new_with_annotation(label, annotation, 0);
+                let mut nt = NonTerminal::new(label, 0);
+                if annotation.is_some() {
+                    nt.set_features(Some(Features::from_vec(vec![(
+                        NODE_ANNOTATION_FEATURE_KEY.into(),
+                        annotation.map(ToOwned::to_owned),
+                    )])));
+                };
                 let nt_idx = g.add_node(Node::NonTerminal(nt));
                 // collect children
                 let mut lower = 0;
