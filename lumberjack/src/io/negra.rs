@@ -7,7 +7,7 @@ use pest::Parser;
 use petgraph::stable_graph::StableGraph;
 
 use crate::io::NODE_ANNOTATION_FEATURE_KEY;
-use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
 /// Iterator over constituency trees in a NEGRA export file.
 ///
@@ -206,10 +206,11 @@ fn process_nonterminal(pair: Pair<Rule>) -> Result<(usize, usize, Edge, NonTermi
     let parent_id = parts.next().unwrap().as_str().parse::<usize>()?;
     let mut nt = NonTerminal::new(label, 0);
     if annotation.is_some() {
-        nt.set_features(Some(Features::from_vec(vec![(
-            NODE_ANNOTATION_FEATURE_KEY.into(),
-            annotation,
-        )])));
+        nt.set_features(Some(
+            vec![(NODE_ANNOTATION_FEATURE_KEY, annotation)]
+                .into_iter()
+                .collect(),
+        ));
     };
     Ok((parent_id, self_id, edge.into(), nt))
 }
@@ -236,7 +237,7 @@ fn process_terminal(pair: Pair<Rule>, idx: usize) -> Result<(usize, Edge, Node),
     let mut terminal = Terminal::new(form, pos, idx);
     terminal.set_lemma(Some(lemma));
     if morph != "--" {
-        terminal.set_features(Some(Features::from_vec(vec![(morph.into(), None)])));
+        terminal.features_mut().insert::<_, String>(morph, None);
     }
 
     Ok((parent_id, edge.into(), Node::Terminal(terminal)))
@@ -324,10 +325,9 @@ mod tests {
         )));
         let d = g.add_node(Node::Terminal(d));
         let mut nxorg = NonTerminal::new("NX", Span::new_continuous(1, 3));
-        nxorg.set_features(Some(Features::from_vec(vec![(
-            NODE_ANNOTATION_FEATURE_KEY.into(),
-            Some("ORG".into()),
-        )])));
+        nxorg
+            .features_mut()
+            .insert(NODE_ANNOTATION_FEATURE_KEY, Some("ORG"));
         let s = g.add_node(Node::Terminal(s));
         let nxorg = g.add_node(Node::NonTerminal(nxorg));
         let root = g.add_node(Node::NonTerminal(NonTerminal::new(
@@ -388,8 +388,7 @@ mod tests {
         assert_eq!(edge, Edge::from(Some("HD")));
         let mut term = Terminal::new("was", "PIS", 0);
         term.set_lemma(Some("etwas"));
-        let features = Features::from_vec(Some(("***".into(), None)).into_iter().collect());
-        term.set_features(Some(features));
+        term.set_features(Some(Features::from("***")));
         assert_eq!(terminal, Node::Terminal(term));
 
         let term = "#was etwas   PIS *** HD 502\n";

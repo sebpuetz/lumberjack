@@ -6,7 +6,7 @@ use pest::Parser;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 
 use crate::io::{ReadTree, WriteTree, NODE_ANNOTATION_FEATURE_KEY};
-use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
 /// `PTBFormat`
 pub enum PTBFormat {
@@ -165,10 +165,10 @@ impl PTBFormat {
                 let (label, edge, annotation) = self.process_label(pairs.next().unwrap())?;
                 let mut nt = NonTerminal::new(label, 0);
                 if annotation.is_some() {
-                    nt.set_features(Some(Features::from_vec(vec![(
-                        NODE_ANNOTATION_FEATURE_KEY.into(),
+                    nt.features_mut().insert(
+                        NODE_ANNOTATION_FEATURE_KEY,
                         annotation.map(ToOwned::to_owned),
-                    )])));
+                    );
                 };
                 let nt_idx = g.add_node(Node::NonTerminal(nt));
                 // collect children

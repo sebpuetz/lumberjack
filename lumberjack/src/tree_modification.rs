@@ -224,12 +224,8 @@ impl TreeOps for Tree {
     fn restore_unary_chains(&mut self, delim: &str) -> Result<(), Error> {
         let nodes = self.graph().node_indices().collect::<Vec<_>>();
         for node in nodes {
-            let chain = if let Some(chain) = self[node]
-                .features_mut()
-                .remove("unary_chain")
-                .map(|(_, chain)| chain)
-            {
-                chain.ok_or_else(|| format_err!("Empty unary_chain feature."))?
+            let chain = if let Some(chain) = self[node].features_mut().remove("unary_chain") {
+                chain
             } else {
                 continue;
             };
