@@ -13,6 +13,9 @@ pub use tree::{Projectivity, Tree};
 mod edge;
 pub use edge::Edge;
 
+mod features;
+pub use features::Features;
+
 pub(crate) mod node;
 pub use node::{Node, NonTerminal, Terminal};
 
