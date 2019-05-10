@@ -176,7 +176,7 @@ impl TreeOps for Tree {
             let mut del = Vec::with_capacity(self.graph().node_count() - self.n_terminals());
             let mut climber = Climber::new(terminal);
             let mut prev_span = self[terminal].span().clone();
-            let mut new_label = String::new();
+            let mut chain = Vec::new();
 
             while let Some(node) = climber.next(self) {
                 if self[node].span() == &prev_span {
@@ -184,32 +184,33 @@ impl TreeOps for Tree {
                     del.push(node);
                     match self[node].nonterminal() {
                         Some(nt) => {
-                            new_label.push_str(nt.label());
-                            new_label.push_str(delim);
+                            chain.push(nt.label().to_owned());
                         }
                         None => return Err(format_err!("Terminal dominating NT.")),
                     }
-                } else if new_label.is_empty() {
+                } else if chain.is_empty() {
                     // no chain and non-matching spans means current node is branching.
                     prev_span = self[node].span().clone();
                     cur = node;
                 } else {
                     // non-matching spans and non-empty label means that a unary chain has ended
-                    new_label.push_str(self[cur].label());
-                    self[cur].set_label(new_label);
+                    self[cur]
+                        .features_mut()
+                        .insert("unary_chain", Some(chain.join(delim)));
+                    chain.clear();
                     // add new node bridging the node-to-be-removed
                     self.graph_mut().add_edge(node, cur, Edge::default());
                     prev_span = self[node].span().clone();
-                    new_label = String::new();
                     cur = node;
                 }
             }
 
-            if !new_label.is_empty() {
+            if !chain.is_empty() {
                 // empty label means, root is attached via unary chain.
                 self.set_root(cur);
-                new_label.push_str(self[cur].label());
-                self[cur].set_label(new_label);
+                self[cur]
+                    .features_mut()
+                    .insert("unary_chain", Some(chain.join(delim)));
             }
 
             // remove unary chain nodes.
@@ -223,19 +224,15 @@ impl TreeOps for Tree {
     fn restore_unary_chains(&mut self, delim: &str) -> Result<(), Error> {
         let nodes = self.graph().node_indices().collect::<Vec<_>>();
         for node in nodes {
-            let mut labels = self[node]
-                .label()
-                .split(delim)
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>();
-
-            // single label means there's no collapsed chain
-            if labels.len() == 1 {
+            let chain = if let Some(chain) = self[node]
+                .features_mut()
+                .remove("unary_chain")
+                .map(|(_, chain)| chain)
+            {
+                chain.ok_or_else(|| format_err!("Empty unary_chain feature."))?
+            } else {
                 continue;
-            }
-
-            // last element refers to the node's actual label
-            self[node].set_label(labels.pop().unwrap());
+            };
 
             let mut cur = node;
             let attachment_handle = if let Some((parent_node, parent_edge)) = self.parent(node) {
@@ -247,7 +244,7 @@ impl TreeOps for Tree {
                 None
             };
 
-            for label in labels {
+            for label in chain.split(delim) {
                 let nt = Node::NonTerminal(NonTerminal::new(label, self[node].span().clone()));
                 let new = self.graph_mut().add_node(nt);
                 self.graph_mut().add_edge(new, cur, Edge::default());
@@ -357,7 +354,7 @@ mod tests {
     use super::{AnnotatePOS, TreeOps};
     use crate::io::{PTBFormat, ReadTree, WriteTree};
     use crate::util::LabelSet;
-    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+    use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
     fn un_collapse_unary() {
@@ -365,9 +362,10 @@ mod tests {
         let mut t = PTBFormat::Simple.string_to_tree(input).unwrap();
         t.collapse_unary_chains("_").unwrap();
         assert_eq!(
-            "(UNARY_ROOT_T t)",
-            PTBFormat::Simple.tree_to_string(&t).unwrap()
+            Some(&Features::from("unary_chain:UNARY_ROOT")),
+            t[t.root()].features()
         );
+        assert_eq!("(T t)", PTBFormat::Simple.tree_to_string(&t).unwrap());
         t.restore_unary_chains("_").unwrap();
         assert_eq!(input, PTBFormat::Simple.tree_to_string(&t).unwrap());
 
@@ -375,7 +373,7 @@ mod tests {
         let mut t = PTBFormat::Simple.string_to_tree(input).unwrap();
         t.collapse_unary_chains("_").unwrap();
         assert_eq!(
-            "(ROOT (UNARY_T t) (ANOTHER_T2 t2))",
+            "(ROOT (T t) (T2 t2))",
             PTBFormat::Simple.tree_to_string(&t).unwrap()
         );
         t.restore_unary_chains("_").unwrap();
@@ -386,7 +384,7 @@ mod tests {
         t.collapse_unary_chains("_").unwrap();
         assert_eq!(
             PTBFormat::Simple.tree_to_string(&t).unwrap(),
-            "(ROOT (UNARY_INTERMEDIATE (T t) (T2 t2)) (ANOTHER_T3 t3))"
+            "(ROOT (INTERMEDIATE (T t) (T2 t2)) (T3 t3))"
         );
         t.restore_unary_chains("_").unwrap();
         assert_eq!(input, PTBFormat::Simple.tree_to_string(&t).unwrap());
