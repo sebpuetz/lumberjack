@@ -56,11 +56,11 @@ impl Features {
     /// Insert `key` with `val`.
     ///
     /// If `key` was present, the replaced value is returned, otherwise `None`.
-    pub fn insert(
-        &mut self,
-        key: impl AsRef<str>,
-        val: Option<impl Into<String>>,
-    ) -> Option<String> {
+    pub fn insert<K, V>(&mut self, key: K, val: Option<V>) -> Option<String>
+    where
+        V: Into<String>,
+        K: AsRef<str>,
+    {
         let key = key.as_ref();
         let val = val.map(Into::into);
         for i in 0..self.vec.len() {
