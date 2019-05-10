@@ -120,6 +120,22 @@ impl Node {
     }
 
     /// Extend the upper bounds of a span.
+    pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Result<Span, Error> {
+        let span = span.into();
+        match self {
+            Node::Terminal(t) => {
+                if let Span::Discontinuous(_) = &span {
+                    return Err(format_err!("Can't assign discontinuous span to terminal."));
+                } else if span.n_indices() != 1 {
+                    return Err(format_err!("Terminals cover only single indices."));
+                }
+                Ok(mem::replace(&mut t.span, span))
+            }
+            Node::NonTerminal(nt) => Ok(mem::replace(&mut nt.span, span)),
+        }
+    }
+
+    /// Extend the upper bounds of a span.
     pub(crate) fn extend_span(&mut self) -> Result<(), Error> {
         match self {
             Node::Terminal(_) => Err(format_err!("Can't extend terminal's span.")),

@@ -2,10 +2,11 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
-use petgraph::prelude::{Bfs, Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
+use failure::Error;
+use petgraph::prelude::{Bfs, DfsPostOrder, Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
 
 use crate::util::LabelSet;
-use crate::{Edge, Node};
+use crate::{Edge, Node, Span};
 
 /// Enum describing whether a tree is projective.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -219,6 +220,37 @@ impl Tree {
             },
         );
     }
+
+    /// Reset terminal spans to increasing by 1 at each step.
+    ///
+    /// If a span was skipped because of e.g. removed terminals, restore the correct order.
+    /// If two terminals with same span are present, alphabetical order of forms is used as the
+    /// tie-breaker.
+    #[allow(dead_code)]
+    pub(crate) fn compact_terminal_spans(&mut self) -> Result<(), Error> {
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
+        for (idx, term) in terminals.into_iter().enumerate() {
+            self[term].set_span(idx)?;
+        }
+        Ok(())
+    }
+
+    /// Resets nonterminal spans based on terminal spans.
+    #[allow(dead_code)]
+    pub(crate) fn reset_nt_spans(&mut self) {
+        let mut dfs = DfsPostOrder::new(&self.graph, self.root);
+        while let Some(node) = dfs.next(&self.graph) {
+            if !self[node].is_terminal() {
+                let coverage = self
+                    .children(node)
+                    .flat_map(|child| self[child].span().into_iter())
+                    .collect::<Vec<_>>();
+                let span = Span::from_vec(coverage).unwrap();
+                self[node].nonterminal_mut().unwrap().set_span(span);
+            }
+        }
+    }
 }
 
 impl PartialEq for Tree {
@@ -294,6 +326,28 @@ mod tests {
 
     use crate::util::LabelSet;
     use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+
+    #[test]
+    fn reset_spans() {
+        let mut tree = some_tree();
+        let nt_indices = tree.nonterminals().collect::<Vec<_>>();
+        for nt in nt_indices {
+            tree[nt]
+                .nonterminal_mut()
+                .unwrap()
+                .set_span(Span::from_vec(vec![0, 2]).unwrap());
+        }
+        tree.reset_nt_spans();
+        assert_eq!(tree, some_tree());
+
+        let mut tree = some_tree();
+        let term_indices = tree.terminals().collect::<Vec<_>>();
+        for (idx, term) in term_indices.into_iter().enumerate() {
+            tree[term].set_span(idx + 1).unwrap();
+        }
+        tree.compact_terminal_spans().unwrap();
+        assert_eq!(tree, some_tree());
+    }
 
     #[test]
     fn project_node_labels() {
@@ -408,7 +462,7 @@ mod tests {
         let mut g = StableGraph::new();
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 5));
         let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
         let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);
@@ -449,7 +503,7 @@ mod tests {
     fn some_tree() -> Tree {
         //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 5));
         let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
