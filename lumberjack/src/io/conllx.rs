@@ -1,8 +1,13 @@
-use conllx::graph::Sentence;
+use std::convert::TryFrom;
+
+use conllx::graph::{Node, Sentence};
 use conllx::io::{WriteSentence, Writer};
 use conllx::token::{Features, Token};
 use failure::Error;
 
+use crate::io::encode::{AbsoluteAncestor, ConversionResult, RelativeAncestor};
+use crate::io::{AbsoluteEncoding, Decode, RelativeEncoding};
+use crate::tree_modification::TreeOps;
 use crate::{Terminal, Tree, WriteTree};
 use std::io::Write;
 
@@ -22,16 +27,105 @@ where
 pub trait ToConllx {
     /// Nonconsuming conversion to CONLLX.
     fn to_conllx(&self) -> Sentence;
-    /// Consuming conversion to CONLLX.
-    fn into_conllx(self) -> Sentence;
+}
+
+/// Conversion Trait from CONLLX to `Tree`.
+pub trait TryFromConllx: Sized {
+    /// Attempt to construct a tree from labels annotated on a `Sentence`.
+    ///
+    /// Assumes that the encoding is found by key `"abs_ancestor"`.
+    fn try_from_conllx_with_absolute_encoding(sentence: &Sentence) -> Result<Self, Error>;
+
+    /// Attempt to construct a tree from labels annotated on a `Sentence`.
+    ///
+    /// Assumes that the encoding is found by key `"rel_ancestor"`.
+    ///
+    /// This method converts the relative encoding to an absolute scale one before constructing
+    /// the tree. If that conversion fails, `ConversionResult::fix` is called to finish the
+    /// conversion.
+    fn try_from_conllx_with_relative_encoding(sentence: &Sentence) -> Result<Self, Error>;
+}
+
+impl TryFromConllx for Tree {
+    fn try_from_conllx_with_absolute_encoding(sentence: &Sentence) -> Result<Self, Error> {
+        let mut encoding = Vec::with_capacity(sentence.len() - 1);
+        let mut terminals = Vec::with_capacity(sentence.len() - 1);
+        for (idx, token) in sentence.iter().filter_map(Node::token).enumerate() {
+            let ancestor = token
+                .features()
+                .and_then(|f| f.as_map().get("abs_ancestor"))
+                .ok_or_else(|| format_err!("Missing ancestor feature."))?
+                .as_ref()
+                .map(String::as_str)
+                .ok_or_else(|| format_err!("Ancestor feature missing value."))?;
+            let terminal = Terminal::new(token.form(), token.pos().unwrap_or("_"), idx);
+            terminals.push(terminal);
+            let mut parts = ancestor.split('~');
+            let ancestor = parts
+                .next()
+                .ok_or_else(|| format_err!("Invalid ancestor part."))?;
+            let unary_chain = parts
+                .next()
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned);
+
+            let ancestor = match ancestor {
+                "NONE" => None,
+                s => {
+                    let rel_ancestor = AbsoluteAncestor::try_from(s)?;
+                    Some(rel_ancestor)
+                }
+            };
+            encoding.push((ancestor, unary_chain))
+        }
+        let mut tree = Tree::decode(AbsoluteEncoding::new(encoding), terminals);
+        tree.restore_unary_chains("_")?;
+        Ok(tree)
+    }
+
+    fn try_from_conllx_with_relative_encoding(sentence: &Sentence) -> Result<Self, Error> {
+        let mut encoding = Vec::with_capacity(sentence.len() - 1);
+        let mut terminals = Vec::with_capacity(sentence.len() - 1);
+        for (idx, token) in sentence.iter().filter_map(Node::token).enumerate() {
+            let ancestor = token
+                .features()
+                .and_then(|f| f.as_map().get("rel_ancestor"))
+                .ok_or_else(|| format_err!("Missing ancestor feature."))?
+                .as_ref()
+                .map(String::as_str)
+                .ok_or_else(|| format_err!("Ancestor feature missing value."))?;
+            let terminal = Terminal::new(token.form(), token.pos().unwrap_or("_"), idx);
+            terminals.push(terminal);
+            let mut parts = ancestor.split('~');
+            let ancestor = parts
+                .next()
+                .ok_or_else(|| format_err!("Invalid ancestor part."))?;
+            let unary_chain = parts
+                .next()
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned);
+
+            let ancestor = match ancestor {
+                "NONE" => None,
+                s => {
+                    let rel_ancestor = RelativeAncestor::try_from(s)?;
+                    Some(rel_ancestor)
+                }
+            };
+            encoding.push((ancestor, unary_chain))
+        }
+        let encoding = match AbsoluteEncoding::try_from_relative(RelativeEncoding::new(encoding)) {
+            ConversionResult::Success(encoding) => encoding,
+            ConversionResult::Error(err) => err.fix(),
+        };
+        let mut tree = Tree::decode(encoding, terminals);
+        tree.restore_unary_chains("_")?;
+        Ok(tree)
+    }
 }
 
 impl ToConllx for Tree {
     fn to_conllx(&self) -> Sentence {
-        self.into()
-    }
-
-    fn into_conllx(self) -> Sentence {
         self.into()
     }
 }
@@ -171,7 +265,7 @@ mod tests {
             .features_mut()
             .insert::<_, String>("feature", None);
         tree[nounphrase].features_mut().insert("key", Some("val"));
-        let conll_sentence = tree.into_conllx();
+        let conll_sentence = Sentence::from(tree);
         let mut target = Sentence::new();
         target.push(
             TokenBuilder::new("Nounphrase")
