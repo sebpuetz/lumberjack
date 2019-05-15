@@ -38,13 +38,22 @@ impl AnnotatePOS for Tree {
     }
 }
 
-/// Trait specifying methods to modify tree structure.
+/// Trait specifying methods to modify trees.
 pub trait TreeOps {
+    /// Annotate the parent tag as a feature.
+    ///
+    /// Annotates the tag of each terminal's parent as a feature.
+    ///
+    /// Returns `Error` if the tree contains `Terminal`s without a parent node.
+    fn annotate_parent_tag(&mut self) -> Result<(), Error>;
+
     /// Insert an intermediate node above terminals.
     ///
     /// If a terminal is not dominated by a node with label matched by `tag_set` a new non-terminal
     /// node is inserted above with a specified label. Runs of terminals whose parent node is not
     /// matched by `tag_set` are collected under a single new node.
+    ///
+    /// Returns `Error` if the tree contains `Terminal`s without a parent node.
     fn insert_intermediate(
         &mut self,
         tag_set: &LabelSet,
@@ -77,18 +86,27 @@ pub trait TreeOps {
 }
 
 impl TreeOps for Tree {
+    fn annotate_parent_tag(&mut self) -> Result<(), Error> {
+        let terminals = self.terminals().collect::<Vec<_>>();
+        for terminal in terminals.into_iter() {
+            let (parent, _) = self
+                .parent(terminal)
+                .ok_or_else(|| format_err!("Terminal without parent:\n{}", self[terminal]))?;
+
+            let label = self[parent].label().to_owned();
+            self[terminal].features_mut().insert("parent", Some(label));
+        }
+        Ok(())
+    }
+
     fn insert_intermediate(
         &mut self,
         tag_set: &LabelSet,
         insertion_label: &str,
     ) -> Result<(), Error> {
-        // can't perform insertion tree with the only node being a terminal.
-        if self.graph().node_count() == 1 {
-            return Ok(());
-        }
-
         let terminals = self.terminals().collect::<Vec<_>>();
         let mut prev_attachment = None;
+
         for (position, terminal) in terminals.into_iter().enumerate() {
             let (parent, edge_id) = self
                 .parent(terminal)
