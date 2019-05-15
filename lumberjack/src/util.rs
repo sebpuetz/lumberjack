@@ -77,7 +77,7 @@ impl LabelSet {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::io::{PTBFormat, ReadTree};
+    use crate::io::PTBFormat;
     use crate::util::{Climber, LabelSet};
 
     #[test]

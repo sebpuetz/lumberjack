@@ -5,7 +5,7 @@ extern crate failure;
 extern crate pest_derive;
 
 pub mod io;
-pub use io::{NegraTreeIter, PTBTreeIter};
+pub use io::{NegraReader, PTBReader, PTBWriter, WriteTree};
 
 mod tree;
 pub use tree::{Projectivity, Tree};

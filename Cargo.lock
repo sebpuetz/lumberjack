@@ -208,6 +208,7 @@ name = "lumberjack-utils"
 version = "0.1.0"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "conllx 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "lumberjack 0.1.0",
  "stdinout 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -17,25 +17,25 @@ use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 ///
 /// Note:   If the reader never encounters a line according to `Rule::bos`, `None` is returned.
 ///         `Rule::bos` expects a line starting with `#BOS SENT_ID` followed by optional comments.
-pub struct NegraTreeIter<R>
+pub struct NegraReader<R>
 where
     R: BufRead,
 {
     inner: Lines<R>,
 }
 
-impl<R> NegraTreeIter<R>
+impl<R> NegraReader<R>
 where
     R: BufRead,
 {
     /// Creates a new `NegraTreeIter` over the NEGRA trees in the reader.
-    pub fn new(reader: R) -> NegraTreeIter<R> {
-        NegraTreeIter {
+    pub fn new(reader: R) -> NegraReader<R> {
+        NegraReader {
             inner: reader.lines(),
         }
     }
 }
-impl<R> Iterator for NegraTreeIter<R>
+impl<R> Iterator for NegraReader<R>
 where
     R: BufRead,
 {
@@ -252,7 +252,7 @@ mod tests {
     use std::io::BufReader;
 
     use super::{
-        negra_to_tree, process_nonterminal, process_terminal, NEGRAParser, NegraTreeIter, Rule,
+        negra_to_tree, process_nonterminal, process_terminal, NEGRAParser, NegraReader, Rule,
     };
 
     use crate::io::NODE_ANNOTATION_FEATURE_KEY;
@@ -263,7 +263,7 @@ mod tests {
         let input = File::open("testdata/10.negra").unwrap();
         let reader = BufReader::new(input);
         let mut n = 0;
-        for tree in NegraTreeIter::new(reader) {
+        for tree in NegraReader::new(reader) {
             tree.unwrap();
             n += 1;
         }
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let f = File::open("testdata/10.negra").unwrap();
-        let mut iter = NegraTreeIter::new(BufReader::new(f));
+        let mut iter = NegraReader::new(BufReader::new(f));
         iter.next();
         iter.next();
         let string_rep = "#BOS 3  2 1070544990 0 %% HEADLINE\n\
@@ -296,7 +296,7 @@ mod tests {
     fn test_first() {
         let f = File::open("testdata/single.negra").unwrap();
         let br = BufReader::new(f);
-        let tree = NegraTreeIter::new(br).next().unwrap().unwrap();
+        let tree = NegraReader::new(br).next().unwrap().unwrap();
         let mut g = StableGraph::new();
         let mut v = Terminal::new("V", "VVFIN", 0);
         v.set_lemma(Some("v"));

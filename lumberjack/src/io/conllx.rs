@@ -1,6 +1,19 @@
-use crate::{Terminal, Tree};
 use conllx::graph::Sentence;
+use conllx::io::{WriteSentence, Writer};
 use conllx::token::{Features, Token};
+use failure::Error;
+
+use crate::{Terminal, Tree, WriteTree};
+use std::io::Write;
+
+impl<W> WriteTree for Writer<W>
+where
+    W: Write,
+{
+    fn write_tree(&mut self, tree: &Tree) -> Result<(), Error> {
+        self.write_sentence(&tree.into())
+    }
+}
 
 /// Conversion Trait to CONLLX.
 ///
@@ -85,7 +98,6 @@ mod tests {
     use crate::io::conllx::ToConllx;
     use crate::io::negra::negra_to_tree;
     use crate::io::ptb::PTBFormat;
-    use crate::io::ReadTree;
 
     #[test]
     fn to_conllx() {

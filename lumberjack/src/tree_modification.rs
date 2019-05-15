@@ -366,7 +366,7 @@ mod tests {
     use petgraph::prelude::StableGraph;
 
     use super::{AnnotatePOS, TreeOps};
-    use crate::io::{PTBFormat, ReadTree, WriteTree};
+    use crate::io::PTBFormat;
     use crate::util::LabelSet;
     use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 

@@ -1,12 +1,46 @@
-use std::io::{BufRead, Lines};
+use std::io::{BufRead, Lines, Write};
 
 use failure::Error;
 use pest::iterators::Pair;
 use pest::Parser;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 
-use crate::io::{ReadTree, WriteTree, NODE_ANNOTATION_FEATURE_KEY};
+use crate::io::{WriteTree, NODE_ANNOTATION_FEATURE_KEY};
 use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+
+/// PTBWriter.
+///
+/// Struct to write trees to the bracketed formats defined in `PTBFormat`.
+pub struct PTBWriter<W> {
+    writer: W,
+    format: PTBFormat,
+}
+
+impl<W> PTBWriter<W>
+where
+    W: Write,
+{
+    /// Construct a new writer.
+    pub fn new(writer: W, format: PTBFormat) -> Self {
+        PTBWriter { writer, format }
+    }
+}
+
+impl<W> WriteTree for PTBWriter<W>
+where
+    W: Write,
+{
+    fn write_tree(&mut self, tree: &Tree) -> Result<(), Error> {
+        let s = self.format.tree_to_string(tree)?;
+        writeln!(self.writer, "{}", s)?;
+        Ok(())
+    }
+}
+
+// dummy struct required by pest
+#[derive(Parser)]
+#[grammar = "io/ptb.pest"]
+struct PTBParser;
 
 /// `PTBFormat`
 pub enum PTBFormat {
@@ -42,23 +76,18 @@ pub enum PTBFormat {
     TueBa,
 }
 
-impl WriteTree for PTBFormat {
-    fn tree_to_string(&self, tree: &Tree) -> Result<String, Error> {
+impl PTBFormat {
+    /// Convert the tree into a bracketed string according to the format.
+    pub fn tree_to_string(&self, tree: &Tree) -> Result<String, Error> {
         if tree.projective() {
             Ok(self.format_sub_tree(tree, tree.root(), None))
         } else {
             Err(format_err!("Can't linearize nonprojective tree"))
         }
     }
-}
 
-// dummy struct required by pest
-#[derive(Parser)]
-#[grammar = "io/ptb.pest"]
-struct PTBParser;
-
-impl ReadTree for PTBFormat {
-    fn string_to_tree(&self, string: &str) -> Result<Tree, Error> {
+    /// Construct a tree from a bracketed representation according to the format.
+    pub fn string_to_tree(&self, string: &str) -> Result<Tree, Error> {
         let mut graph = StableGraph::new();
         let mut n_terminals = 0;
         let mut parsed_line = PTBParser::parse(Rule::tree, string)?;
@@ -70,18 +99,6 @@ impl ReadTree for PTBFormat {
             root,
             Projectivity::Projective,
         ))
-    }
-}
-
-impl PTBFormat {
-    pub fn try_from_str(s: &str) -> Result<PTBFormat, Error> {
-        let s = s.to_lowercase();
-        match s.as_str() {
-            "tueba" => Ok(PTBFormat::TueBa),
-            "ptb" => Ok(PTBFormat::PTB),
-            "simple" => Ok(PTBFormat::Simple),
-            _ => Err(format_err!("Unknown format: {}", s)),
-        }
     }
 
     fn format_sub_tree(&self, sentence: &Tree, position: NodeIndex, edge: Option<&str>) -> String {
@@ -267,13 +284,13 @@ pub enum PTBLineFormat {
 }
 
 /// Iterator over trees in PTB format file.
-pub struct PTBTreeIter<R> {
+pub struct PTBReader<R> {
     inner: Lines<R>,
     line_format: PTBLineFormat,
     format: PTBFormat,
 }
 
-impl<R> Iterator for PTBTreeIter<R>
+impl<R> Iterator for PTBReader<R>
 where
     R: BufRead,
 {
@@ -316,13 +333,13 @@ where
     }
 }
 
-impl<R> PTBTreeIter<R>
+impl<R> PTBReader<R>
 where
     R: BufRead,
 {
     /// Constructs a new tree iterator.
     pub fn new(read: R, format: PTBFormat, line_format: PTBLineFormat) -> Self {
-        PTBTreeIter {
+        PTBReader {
             inner: read.lines(),
             format,
             line_format,
@@ -352,16 +369,13 @@ mod tests {
     use petgraph::prelude::NodeIndex;
     use petgraph::stable_graph::StableGraph;
 
-    use crate::io::{
-        ptb::{PTBFormat, PTBLineFormat, PTBTreeIter},
-        ReadTree, WriteTree,
-    };
+    use crate::io::ptb::{PTBFormat, PTBLineFormat, PTBReader};
     use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
 
     #[test]
     pub fn test_multiline() {
         let input = File::open("testdata/single_multiline.ptb").unwrap();
-        let mut reader = PTBTreeIter::new(
+        let mut reader = PTBReader::new(
             BufReader::new(input),
             PTBFormat::TueBa,
             PTBLineFormat::MultiLine,
