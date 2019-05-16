@@ -212,7 +212,15 @@ impl Tree {
                     (Node::NonTerminal(_), Node::Terminal(_)) => Ordering::Greater,
                     (Node::Terminal(_), Node::NonTerminal(_)) => Ordering::Less,
                     (Node::NonTerminal(nt1), Node::NonTerminal(nt2)) => {
-                        nt1.label().cmp(nt2.label())
+                        let order = self
+                            .children(*node1)
+                            .count()
+                            .cmp(&self.children(*node2).count());
+                        if order != Ordering::Equal {
+                            order
+                        } else {
+                            nt1.label().cmp(nt2.label())
+                        }
                     }
                     (Node::Terminal(t1), Node::Terminal(t2)) => t1.form().cmp(t2.form()),
                 },
@@ -253,6 +261,34 @@ impl Tree {
     }
 }
 
+// recursively check if at each level the trees are identical.
+fn eq_helper(tree_1_idx: NodeIndex, tree_1: &Tree, tree_2_idx: NodeIndex, tree_2: &Tree) -> bool {
+    let mut nodes1 = tree_1.children(tree_1_idx).collect::<Vec<_>>();
+    tree_1.sort_indices(&mut nodes1);
+    let mut nodes2 = tree_2.children(tree_2_idx).collect::<Vec<_>>();
+    tree_2.sort_indices(&mut nodes2);
+
+    for (node1, node2) in nodes1.into_iter().zip(nodes2) {
+        if tree_1[node1] != tree_2[node2] {
+            return false;
+        }
+        let p1 = tree_1
+            .parent(node1)
+            .map(|(parent_id, edge_id)| (&tree_1[parent_id], &tree_1[edge_id]));
+        let p2 = tree_2
+            .parent(node2)
+            .map(|(parent_id, edge_id)| (&tree_2[parent_id], &tree_2[edge_id]));
+        if p1 != p2 {
+            return false;
+        }
+
+        if !eq_helper(node1, tree_1, node2, tree_2) {
+            return false;
+        }
+    }
+    true
+}
+
 impl PartialEq for Tree {
     fn eq(&self, other: &Tree) -> bool {
         // cheap checks first, node count and number of terminals
@@ -263,30 +299,7 @@ impl PartialEq for Tree {
             return false;
         };
 
-        // sort indices by criteria defined above
-        let mut nodes1 = self.graph.node_indices().collect::<Vec<_>>();
-        self.sort_indices(&mut nodes1);
-        let mut nodes2 = other.graph.node_indices().collect::<Vec<_>>();
-        other.sort_indices(&mut nodes2);
-
-        // two trees are equal iff after sorting for all node pairs (node1, node2) it holds that
-        // node1 == node2, parent(node1) == parent(node2) and
-        // incoming_edge(node1) == incoming_edge(node2)
-        for (node1, node2) in nodes1.into_iter().zip(nodes2) {
-            if self[node1] != other[node2] {
-                return false;
-            }
-            let p1 = self
-                .parent(node1)
-                .map(|(parent_id, edge_id)| (&self[parent_id], &self[edge_id]));
-            let p2 = other
-                .parent(node2)
-                .map(|(parent_id, edge_id)| (&other[parent_id], &other[edge_id]));
-            if p1 != p2 {
-                return false;
-            }
-        }
-        true
+        eq_helper(self.root(), self, other.root(), other)
     }
 }
 
