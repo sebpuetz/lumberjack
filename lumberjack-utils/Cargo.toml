@@ -13,5 +13,5 @@ repository = "https://github.com/sebpuetz/lumberjack"
 clap = "2"
 conllx = "0.11"
 failure = "0.1"
-lumberjack = { path = "../lumberjack"}
-stdinout = "0.4" 
+lumberjack = { path = "../lumberjack", version = "0.1.0" }
+stdinout = "0.4"
