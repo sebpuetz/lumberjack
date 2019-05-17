@@ -19,6 +19,7 @@ where
     fn from(s: S) -> Self {
         s.as_ref()
             .split('|')
+            .filter(|s| !s.is_empty())
             .map(|f| {
                 let mut parts = f.split(':');
                 let k = parts.next().unwrap();

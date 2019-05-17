@@ -258,7 +258,7 @@ impl PTBFormat {
                 PTBFormat::TueBa => {
                     let mut parts = label.split(':');
                     let tag = parts.next().unwrap();
-                    let edge = parts.next();
+                    let edge = parts.next().filter(|s| s != &"--");
                     let mut label_parts = tag.split('=');
                     let label = label_parts.next().unwrap();
                     let annotation = label_parts.next();
