@@ -7,9 +7,7 @@ Read and process constituency trees in various formats.
 ## Install:
 * From GitHub:
 ```bash
-git clone https://github.com/sebpuetz/lumberjack
-cd lumberjack
-cargo install --path . 
+cargo install --git https://github.com/sebpuetz/lumberjack
 ```
 
 ## Usage as standalone:
