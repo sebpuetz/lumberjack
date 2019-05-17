@@ -5,6 +5,10 @@
 Read and process constituency trees in various formats.
 
 ## Install:
+* From crates.io:
+```bash
+cargo install lumberjack-utils
+```
 * From GitHub:
 ```bash
 cargo install --git https://github.com/sebpuetz/lumberjack
