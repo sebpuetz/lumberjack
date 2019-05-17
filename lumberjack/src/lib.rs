@@ -16,12 +16,13 @@ pub use edge::Edge;
 mod features;
 pub use features::Features;
 
-pub(crate) mod node;
+mod node;
 pub use node::{Node, NonTerminal, Terminal};
 
-pub(crate) mod span;
+mod span;
 pub use span::{ContinuousSpan, SkipSpan, Span};
 
-pub mod tree_modification;
+mod tree_modification;
+pub use tree_modification::{AnnotatePOS, Projectivize, TreeOps};
 
 pub mod util;

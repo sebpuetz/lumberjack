@@ -45,7 +45,7 @@ pub trait TreeOps {
     /// Annotates the tag of each terminal's parent as a feature.
     ///
     /// Returns `Error` if the tree contains `Terminal`s without a parent node.
-    fn annotate_parent_tag(&mut self) -> Result<(), Error>;
+    fn annotate_parent_tag(&mut self, feature_name: &str) -> Result<(), Error>;
 
     /// Insert an intermediate node above terminals.
     ///
@@ -86,7 +86,7 @@ pub trait TreeOps {
 }
 
 impl TreeOps for Tree {
-    fn annotate_parent_tag(&mut self) -> Result<(), Error> {
+    fn annotate_parent_tag(&mut self, feature_name: &str) -> Result<(), Error> {
         let terminals = self.terminals().collect::<Vec<_>>();
         for terminal in terminals.into_iter() {
             let (parent, _) = self
@@ -94,7 +94,9 @@ impl TreeOps for Tree {
                 .ok_or_else(|| format_err!("Terminal without parent:\n{}", self[terminal]))?;
 
             let label = self[parent].label().to_owned();
-            self[terminal].features_mut().insert("parent", Some(label));
+            self[terminal]
+                .features_mut()
+                .insert(feature_name, Some(label));
         }
         Ok(())
     }

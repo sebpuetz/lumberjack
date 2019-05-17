@@ -12,9 +12,8 @@ use stdinout::{Input, OrExit, Output};
 use lumberjack::io::{
     Decode, Encode, PTBFormat, PTBLineFormat, PTBWriter, TryFromConllx, WriteTree,
 };
-use lumberjack::tree_modification::{Projectivize, TreeOps};
 use lumberjack::util::LabelSet;
-use lumberjack::{NegraReader, PTBReader, Tree};
+use lumberjack::{NegraReader, PTBReader, Projectivize, Tree, TreeOps};
 
 fn main() {
     let app = build();
@@ -34,7 +33,16 @@ fn main() {
     let output = Output::from(out_path);
     let writer = output.write().or_exit("Can't open output writer.", 1);
 
-    let parent = matches.is_present(PARENT) && out_formatter == OutFormat::Conllx;
+    let parent_feature = if matches.is_present(PARENT) {
+        Some(
+            matches
+                .value_of(PARENT)
+                .map_or("parent".to_string(), |s| s.to_string()),
+        )
+    } else {
+        None
+    };
+
     let remove_dummies = matches.is_present(REMOVE_DUMMIES);
     let projectivize = matches.is_present(PROJECTIVIZE);
     let filter_set = matches.value_of(FILTER_SET).map(get_set_from_file);
@@ -63,8 +71,8 @@ fn main() {
                 .or_exit("Can't insert nodes.", 1);
         }
 
-        if parent {
-            tree.annotate_parent_tag()
+        if let Some(name) = parent_feature.as_ref() {
+            tree.annotate_parent_tag(name)
                 .or_exit("Can't annotate parent tags.", 1);
         }
 
@@ -124,7 +132,7 @@ impl<'a> TryFrom<&'a str> for InFormat {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub enum OutFormat {
+enum OutFormat {
     Absolute,
     Conllx,
     PTB,
