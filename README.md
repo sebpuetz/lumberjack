@@ -1,3 +1,4 @@
+[![Crate](https://img.shields.io/crates/v/lumberjack.svg)](https://crates.io/crates/lumberjack)
 [![Build Status](https://travis-ci.org/sebpuetz/lumberjack.svg?branch=master)](https://travis-ci.org/sebpuetz/lumberjack)
 
 # lumberjack
