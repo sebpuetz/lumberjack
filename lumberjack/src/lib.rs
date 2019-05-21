@@ -20,7 +20,7 @@ mod node;
 pub use node::{Node, NonTerminal, Terminal};
 
 mod span;
-pub use span::{ContinuousSpan, SkipSpan, Span};
+pub use span::Span;
 
 mod tree_modification;
 pub use tree_modification::{AnnotatePOS, Projectivize, TreeOps};

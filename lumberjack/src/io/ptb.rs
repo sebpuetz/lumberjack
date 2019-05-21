@@ -194,12 +194,12 @@ impl PTBFormat {
                 for (idx, inner_pair) in pairs.enumerate() {
                     let (span, child_idx, edge) = self.parse_value(inner_pair, g, terminals)?;
                     if idx == 0 {
-                        lower = span.lower();
+                        lower = span.start;
                     }
-                    upper = span.upper();
+                    upper = span.end;
                     g.add_edge(nt_idx, child_idx, edge);
                 }
-                let span = Span::new_continuous(lower, upper);
+                let span = Span::new(lower, upper);
                 g[nt_idx].nonterminal_mut().unwrap().set_span(span.clone());
 
                 Ok((span, nt_idx, edge.into()))
@@ -415,7 +415,7 @@ mod tests {
         let term2 = Terminal::new("t2", "TERM2", 1);
         let term2 = cmp_graph.add_node(Node::Terminal(term2));
 
-        let nt = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
+        let nt = NonTerminal::new("FIRST", Span::new(0, 2));
         let first = cmp_graph.add_node(Node::NonTerminal(nt));
         cmp_graph.add_edge(first, term1, Edge::default());
         cmp_graph.add_edge(first, term2, Edge::default());
@@ -423,14 +423,14 @@ mod tests {
         let term3 = Terminal::new("t1", "TERM1", 2);
         let term3 = cmp_graph.add_node(Node::Terminal(term3));
 
-        let nt2 = NonTerminal::new("SEC", Span::new_continuous(2, 3));
+        let nt2 = NonTerminal::new("SEC", Span::new(2, 3));
         let sec = cmp_graph.add_node(Node::NonTerminal(nt2));
         cmp_graph.add_edge(sec, term3, Edge::default());
 
         let term4 = Terminal::new("t", "TERM", 3);
         let term4 = cmp_graph.add_node(Node::Terminal(term4));
 
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 4));
+        let root = NonTerminal::new("ROOT", Span::new(0, 4));
         let root = cmp_graph.add_node(Node::NonTerminal(root));
 
         cmp_graph.add_edge(root, first, Edge::default());

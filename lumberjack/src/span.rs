@@ -4,76 +4,91 @@ use std::ops::Range;
 
 use failure::Error;
 
-/// Span enum.
+/// Span of a node.
 ///
-/// Enum to represent the range of indices covered by a node.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Span {
-    /// Variant covering continuous indices.
-    Continuous(ContinuousSpan),
-    /// Variant covering discontinuous indices.
-    Discontinuous(SkipSpan),
+/// Spans are non-empty ranges that optionally skip indices.
+///
+/// Spans are non-inclusive and do not cover the `end`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Span {
+    /// Lower bounds of the span.
+    pub start: usize,
+    /// Upper bounds of the span.
+    pub end: usize,
+    skips: Option<HashSet<usize>>,
 }
 
 impl From<usize> for Span {
     fn from(idx: usize) -> Self {
-        Span::new_continuous(idx, idx + 1)
-    }
-}
-
-impl Clone for Span {
-    fn clone(&self) -> Self {
-        match self {
-            Span::Continuous(span) => Span::Continuous(*span),
-            Span::Discontinuous(span) => Span::Discontinuous(span.clone()),
+        Span {
+            start: idx,
+            end: idx + 1,
+            skips: None,
         }
     }
 }
 
 impl Span {
-    /// Return whether `index` is inside the `Span`.
+    /// Create new span with skipped indices.
+    ///
+    /// `skips` has to be non-empty, to construct a span without skips, use `Span::new`.
+    ///
+    /// Skipped indices outside of lower and upper are ignored.
+    pub(crate) fn new_with_skips(lower: usize, upper: usize, skips: HashSet<usize>) -> Self {
+        assert!(lower < upper, "Span start has to be smaller then end.");
+        assert!(
+            !skips.is_empty(),
+            "Skips have to be non-empty if using this constructor."
+        );
+        assert!(upper - lower - skips.len() > 0, "Can't skip all indices.");
+        Span {
+            start: lower,
+            end: upper,
+            skips: Some(skips),
+        }
+    }
+
+    /// Create new continuous span.
+    pub(crate) fn new(lower: usize, upper: usize) -> Self {
+        assert!(lower < upper, "Span start has to be smaller then end.");
+        Span {
+            start: lower,
+            end: upper,
+            skips: None,
+        }
+    }
+
+    /// Return whether then span covers the index.
     pub fn contains(&self, index: usize) -> bool {
-        match self {
-            Span::Continuous(span) => span.contains(index),
-            Span::Discontinuous(span) => span.contains(index),
-        }
-    }
-
-    /// Get this spans lower bounds.
-    pub fn lower(&self) -> usize {
-        match self {
-            Span::Continuous(span) => span.lower,
-            Span::Discontinuous(span) => span.lower,
-        }
-    }
-
-    /// Get this spans upper bounds.
-    pub fn upper(&self) -> usize {
-        match self {
-            Span::Continuous(span) => span.upper,
-            Span::Discontinuous(span) => span.upper,
+        if self.start <= index && self.end > index {
+            self.skips
+                .as_ref()
+                .map(|skips| !skips.contains(&index))
+                .unwrap_or(true)
+        } else {
+            false
         }
     }
 
     /// Get this spans bounds as a tuple.
     pub fn bounds(&self) -> (usize, usize) {
-        (self.lower(), self.upper())
+        (self.start, self.end)
     }
 
     /// Get the number of indices covered.
     pub fn n_indices(&self) -> usize {
-        match self {
-            Span::Discontinuous(span) => span.upper - span.lower - span.skip.len(),
-            Span::Continuous(span) => span.upper - span.lower,
+        if let Some(ref skips) = self.skips {
+            self.end - self.start - skips.len()
+        } else {
+            self.end - self.start
         }
     }
 
-    pub(crate) fn discontinuous(&self) -> Option<&SkipSpan> {
-        if let Span::Discontinuous(span) = self {
-            Some(span)
-        } else {
-            None
-        }
+    /// Get the skipped indices of this span.
+    ///
+    /// Returns `None` if the span is continuous.
+    pub fn skips(&self) -> Option<&HashSet<usize>> {
+        self.skips.as_ref()
     }
 
     // Internally used constructor to build a span from a vec.
@@ -83,7 +98,7 @@ impl Span {
             (Some(first), Some(last)) => (*first, *last + 1),
             _ => return Err(format_err!("Can't build range from empty vec")),
         };
-        let mut skip = HashSet::new();
+        let mut skips = HashSet::new();
 
         let mut prev = upper;
         for id in coverage.into_iter().rev() {
@@ -92,134 +107,40 @@ impl Span {
             } else {
                 // duplicate entries end up in this branch but don't get added since the range
                 // (id + 1..prev) is empty
-                skip.extend(id + 1..prev);
+                skips.extend(id + 1..prev);
 
                 prev = id;
             }
         }
-        if !skip.is_empty() {
-            Ok(Span::Discontinuous(SkipSpan::new(lower, upper, skip)))
+        if skips.is_empty() {
+            Ok(Span::new(lower, upper))
         } else {
-            Ok(Span::Continuous(ContinuousSpan::new(lower, upper)))
+            Ok(Span::new_with_skips(lower, upper, skips))
         }
     }
 
     // Method used internally to increment the upper bounds of a span.
     pub(crate) fn extend(&mut self) {
-        match self {
-            Span::Continuous(span) => span.upper += 1,
-            Span::Discontinuous(span) => span.upper += 1,
-        }
-    }
-
-    // Internally used constructor for convenience.
-    pub(crate) fn new_continuous(lower: usize, upper: usize) -> Self {
-        Span::Continuous(ContinuousSpan::new(lower, upper))
-    }
-}
-
-/// Struct representing the span covered by node attached to this edge
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub struct ContinuousSpan {
-    pub lower: usize,
-    pub upper: usize,
-}
-
-impl ContinuousSpan {
-    pub(crate) fn new(lower: usize, upper: usize) -> Self {
-        assert!(lower < upper);
-        ContinuousSpan { lower, upper }
-    }
-
-    /// Return whether `index` is inside the `Span`.
-    pub fn contains(&self, index: usize) -> bool {
-        index < self.upper && index >= self.lower
-    }
-
-    /// Get this spans lower bounds.
-    pub fn lower(&self) -> usize {
-        self.lower
-    }
-
-    /// Get this spans upper bounds.
-    pub fn upper(&self) -> usize {
-        self.upper
-    }
-
-    /// Get this spans bounds as a tuple.
-    pub fn bounds(&self) -> (usize, usize) {
-        (self.lower, self.upper)
-    }
-
-    /// Number of covered indices.
-    pub fn n_indices(&self) -> usize {
-        self.upper - self.lower
-    }
-}
-
-/// Struct representing discontinuous Coverage
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SkipSpan {
-    lower: usize,
-    upper: usize,
-    skip: HashSet<usize>,
-}
-
-impl SkipSpan {
-    // Internally used constructor for SkipSpan.
-    pub(crate) fn new(lower: usize, upper: usize, skip: HashSet<usize>) -> Self {
-        assert!(lower < upper);
-        assert!(
-            !skip.is_empty(),
-            "SkipSpan hast to contain skipped indices."
-        );
-        assert_ne!(skip.len(), upper - lower, "Can't skip all indices.");
-
-        SkipSpan { lower, upper, skip }
-    }
-
-    /// Return whether `index` is inside the `Span`.
-    pub fn contains(&self, index: usize) -> bool {
-        index < self.upper && index >= self.lower && !self.skip.contains(&index)
-    }
-
-    /// Get this span's skipped indices.
-    pub fn skips(&self) -> &HashSet<usize> {
-        &self.skip
-    }
-
-    /// Get this spans lower bounds.
-    pub fn lower(&self) -> usize {
-        self.lower
-    }
-
-    /// Get this spans upper bounds.
-    pub fn upper(&self) -> usize {
-        self.upper
-    }
-
-    /// Get this spans bounds as a tuple.
-    pub fn bounds(&self) -> (usize, usize) {
-        (self.lower, self.upper)
-    }
-
-    /// Number of covered indices.
-    pub fn n_indices(&self) -> usize {
-        self.upper - self.lower - self.skip.len()
+        self.end += 1;
     }
 }
 
 impl Ord for Span {
+    /// Order of spans is determined by:
+    ///   1. start index
+    ///   2. end index
+    ///   3. number of covered indices.
     fn cmp(&self, other: &Span) -> Ordering {
-        if self.lower() != other.lower() {
-            self.lower().cmp(&other.lower())
-        } else if self.upper() != other.upper() {
-            self.upper().cmp(&other.upper())
+        if self.start != other.start {
+            self.start.cmp(&other.start)
+        } else if self.end != other.end {
+            self.end.cmp(&other.end)
         } else {
             self.n_indices().cmp(&other.n_indices())
         }
     }
 }
+
 impl PartialOrd for Span {
     fn partial_cmp(&self, other: &Span) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -231,33 +152,9 @@ impl<'a> IntoIterator for &'a Span {
     type IntoIter = SpanIter<'a>;
 
     fn into_iter(self) -> SpanIter<'a> {
-        match self {
-            Span::Discontinuous(span) => span.into_iter(),
-            Span::Continuous(span) => span.into_iter(),
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a SkipSpan {
-    type Item = usize;
-    type IntoIter = SpanIter<'a>;
-
-    fn into_iter(self) -> SpanIter<'a> {
         SpanIter {
-            range: self.lower..self.upper,
-            skip: Some(&self.skip),
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a ContinuousSpan {
-    type Item = usize;
-    type IntoIter = SpanIter<'a>;
-
-    fn into_iter(self) -> SpanIter<'a> {
-        SpanIter {
-            range: self.lower..self.upper,
-            skip: None,
+            range: self.start..self.end,
+            skip: self.skips.as_ref(),
         }
     }
 }
@@ -289,18 +186,18 @@ impl<'a> Iterator for SpanIter<'a> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{ContinuousSpan, SkipSpan, Span};
+    use crate::Span;
 
     #[test]
     #[should_panic]
     fn invalid_cont_span_2_1() {
-        Span::new_continuous(2, 1);
+        Span::new(2, 1);
     }
 
     #[test]
     #[should_panic]
     fn invalid_skip_span_2_1() {
-        Span::new_continuous(2, 1);
+        Span::new(2, 1);
     }
 
     #[test]
@@ -309,7 +206,7 @@ mod tests {
         let mut skip = HashSet::new();
         skip.insert(0);
         skip.insert(1);
-        SkipSpan::new(0, 2, skip);
+        Span::new_with_skips(0, 2, skip);
     }
 
     #[test]
@@ -317,9 +214,9 @@ mod tests {
         let mut skip = HashSet::new();
         skip.insert(1);
         skip.insert(2);
-        let span = Span::Discontinuous(SkipSpan::new(0, 4, skip));
-        assert_eq!(span.lower(), 0);
-        assert_eq!(span.upper(), 4);
+        let span = Span::new_with_skips(0, 4, skip);
+        assert_eq!(span.start, 0);
+        assert_eq!(span.end, 4);
         assert_eq!(span.bounds(), (0, 4));
         assert_eq!(span.into_iter().collect::<Vec<_>>(), vec![0, 3]);
     }
@@ -327,7 +224,7 @@ mod tests {
     #[test]
     fn contains_skipspan() {
         let skip = vec![3, 5].into_iter().collect::<HashSet<usize>>();
-        let span = SkipSpan::new(0, 10, skip);
+        let span = Span::new_with_skips(0, 10, skip);
         assert!(span.contains(0));
         assert!(span.contains(1));
         assert!(span.contains(2));
@@ -339,8 +236,8 @@ mod tests {
     }
 
     #[test]
-    fn contains_contspan() {
-        let span = ContinuousSpan::new(0, 10);
+    fn contains_no_skips() {
+        let span = Span::new(0, 10);
         assert!(span.contains(0));
         assert!(span.contains(1));
         assert!(span.contains(2));
@@ -351,7 +248,7 @@ mod tests {
 
     #[test]
     fn contains_span() {
-        let span = Span::new_continuous(0, 10);
+        let span = Span::new(0, 10);
         assert!(span.contains(0));
         assert!(span.contains(1));
         assert!(span.contains(2));
@@ -401,10 +298,10 @@ mod tests {
     }
 
     #[test]
-    fn test_enum_fromvec() {
+    fn test_from_vec() {
         let v = vec![1, 3];
         let span = Span::from_vec(v.clone()).unwrap();
-        if let Span::Discontinuous(span) = span {
+        if let Some(_) = span.skips() {
             for (target, test) in span.into_iter().zip(v) {
                 assert_eq!(target, test);
             }

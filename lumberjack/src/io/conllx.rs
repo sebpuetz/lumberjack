@@ -156,7 +156,7 @@ impl From<Tree> for Sentence {
             if let Some(morph) = terminal.set_features(None) {
                 token.set_features(Some(Features::from_string(morph.to_string())));
             }
-            tokens.push((token, terminal.span().lower()));
+            tokens.push((token, terminal.span().start));
         }
         tokens.sort_by(|t0, t1| t0.1.cmp(&t1.1));
         let mut sentence = Sentence::new();
@@ -170,7 +170,7 @@ impl<'a> From<&'a Tree> for Sentence {
     fn from(tree: &'a Tree) -> Self {
         let mut tokens = tree
             .terminals()
-            .filter_map(|t| tree[t].terminal().map(|t| (t.into(), t.span().lower())))
+            .filter_map(|t| tree[t].terminal().map(|t| (t.into(), t.span().start)))
             .collect::<Vec<_>>();
 
         tokens.sort_by(|t0, t1| t0.1.cmp(&t1.1));

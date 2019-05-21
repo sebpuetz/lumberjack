@@ -163,7 +163,7 @@ impl Encode for Tree {
 
 /// Helper method to get the lowest common ancestor.
 fn get_common(tree: &Tree, terminal: NodeIndex) -> Result<Option<(String, usize)>, Error> {
-    let idx = tree[terminal].span().lower();
+    let idx = tree[terminal].span().start;
     let mut common = None;
     let mut n_common = 0usize;
     let mut climber = Climber::new(terminal);

@@ -136,7 +136,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                 }
 
                 let span = Span::from_vec(coverage)?;
-                if span.discontinuous().is_some() {
+                if span.skips().is_some() {
                     projectivity = Projectivity::Nonprojective;
                 }
                 nonterminal.set_span(span);
@@ -169,7 +169,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                     .ok_or_else(|| format_err!("Sentence without root"))?;
 
                 // root is guaranteed to cover sentence, thus span is 0..n_terminals
-                let span = Span::new_continuous(0, n_terminals);
+                let span = Span::new(0, n_terminals);
                 let root = graph.add_node(Node::NonTerminal(NonTerminal::new("VROOT", span)));
                 for (edge, node) in edge_list {
                     graph.add_edge(root, node, edge);
@@ -313,18 +313,12 @@ mod tests {
         let mut punct = Terminal::new("?", "$.", 4);
         punct.set_lemma(Some("?"));
 
-        let mf = g.add_node(Node::NonTerminal(NonTerminal::new(
-            "MF",
-            Span::new_continuous(1, 4),
-        )));
+        let mf = g.add_node(Node::NonTerminal(NonTerminal::new("MF", Span::new(1, 4))));
         let a = g.add_node(Node::Terminal(a));
         let v = g.add_node(Node::Terminal(v));
-        let lk = g.add_node(Node::NonTerminal(NonTerminal::new(
-            "LK",
-            Span::new_continuous(0, 1),
-        )));
+        let lk = g.add_node(Node::NonTerminal(NonTerminal::new("LK", Span::new(0, 1))));
         let d = g.add_node(Node::Terminal(d));
-        let mut nxorg = NonTerminal::new("NX", Span::new_continuous(1, 3));
+        let mut nxorg = NonTerminal::new("NX", Span::new(1, 3));
         nxorg
             .features_mut()
             .insert(NODE_ANNOTATION_FEATURE_KEY, Some("ORG"));
@@ -332,20 +326,17 @@ mod tests {
         let nxorg = g.add_node(Node::NonTerminal(nxorg));
         let root = g.add_node(Node::NonTerminal(NonTerminal::new(
             "VROOT",
-            Span::new_continuous(0, 5),
+            Span::new(0, 5),
         )));
         let punct = g.add_node(Node::Terminal(punct));
         let simpx = g.add_node(Node::NonTerminal(NonTerminal::new(
             "SIMPX",
-            Span::new_continuous(0, 4),
+            Span::new(0, 4),
         )));
-        let nx = g.add_node(Node::NonTerminal(NonTerminal::new(
-            "NX",
-            Span::new_continuous(3, 4),
-        )));
+        let nx = g.add_node(Node::NonTerminal(NonTerminal::new("NX", Span::new(3, 4))));
         let vxfin = g.add_node(Node::NonTerminal(NonTerminal::new(
             "VXFIN",
-            Span::new_continuous(0, 1),
+            Span::new(0, 1),
         )));
         g.add_edge(mf, nx, Edge::from(Some("OA")));
         g.add_edge(vxfin, v, Edge::from(Some("HD")));

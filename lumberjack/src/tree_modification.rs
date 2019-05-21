@@ -294,17 +294,13 @@ impl Projectivize for Tree {
             let mut log = vec![None; terminals.len()];
 
             while let Some(attachment_point_candidate) = dfs.next(self.graph()) {
-                let span = if let Node::NonTerminal(nt) = &self[attachment_point_candidate] {
-                    if let Span::Discontinuous(span) = nt.span() {
-                        span.to_owned()
-                    } else {
-                        continue;
-                    }
-                } else {
+                let span = self[attachment_point_candidate].span();
+                if span.skips().is_none() {
                     continue;
-                };
+                }
+                let span = span.to_owned();
 
-                let mut skips = span.skips().to_owned();
+                let mut skips = span.skips().unwrap().to_owned();
                 while let Some(&skipped) = skips.iter().next() {
                     // check if terminal at idx skipped has already been reattached. We're
                     // doing a postorder traversal, generally if something has been
@@ -312,7 +308,7 @@ impl Projectivize for Tree {
                     // multiple non-terminals covering the span. In that case, the correct
                     // attachment is that non-terminal starting at the higher index.
                     if let Some(claimed) = log[skipped] {
-                        if claimed >= span.lower() {
+                        if claimed >= span.start {
                             // remove skipped idx so the loop can terminate
                             skips.remove(&skipped);
                             continue;
@@ -331,10 +327,10 @@ impl Projectivize for Tree {
                         // for reattachment
                         if self[attachment_handle_candidate].span() != &reattach_span {
                             for covered in self[attachment_handle_candidate].span() {
-                                if !span.skips().contains(&covered) {
+                                if span.contains(covered) {
                                     for covered in self[attachment_handle].span() {
                                         skips.remove(&covered);
-                                        log[covered] = Some(span.lower());
+                                        log[covered] = Some(span.start);
                                     }
                                     let rm_edge = self.parent(attachment_handle).unwrap().1;
                                     let edge = self.graph_mut().remove_edge(rm_edge).unwrap();
@@ -354,7 +350,7 @@ impl Projectivize for Tree {
                 self[attachment_point_candidate]
                     .nonterminal_mut()
                     .unwrap()
-                    .set_span(Span::new_continuous(span.lower(), span.upper()));
+                    .set_span(Span::new(span.start, span.end));
             }
             self.set_projectivity(Projectivity::Projective);
         }
@@ -431,15 +427,15 @@ mod tests {
     #[test]
     fn filter_nonproj() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
         g.add_edge(root_idx, first_idx, Edge::default());
-        let second = NonTerminal::new("L1", Span::new_continuous(1, 2));
+        let second = NonTerminal::new("L1", Span::new(1, 2));
         let second_idx = g.add_node(Node::NonTerminal(second));
         g.add_edge(root_idx, second_idx, Edge::default());
-        let third = NonTerminal::new("L", Span::new_continuous(3, 4));
+        let third = NonTerminal::new("L", Span::new(3, 4));
         let third_idx = g.add_node(Node::NonTerminal(third));
         g.add_edge(root_idx, third_idx, Edge::default());
         let term1 = Terminal::new("t1", "TERM1", 0);
@@ -467,12 +463,12 @@ mod tests {
             .unwrap();
 
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
         g.add_edge(root_idx, first_idx, Edge::default());
-        let third = NonTerminal::new("L", Span::new_continuous(3, 4));
+        let third = NonTerminal::new("L", Span::new(3, 4));
         let third_idx = g.add_node(Node::NonTerminal(third));
         g.add_edge(root_idx, third_idx, Edge::default());
         let term1 = Terminal::new("t1", "TERM1", 0);
@@ -500,9 +496,9 @@ mod tests {
             .filter_nonterminals(&LabelSet::Positive(tags))
             .unwrap();
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let root_idx = g.add_node(Node::NonTerminal(root));
-        let second = NonTerminal::new("L1", Span::new_continuous(1, 2));
+        let second = NonTerminal::new("L1", Span::new(1, 2));
         let second_idx = g.add_node(Node::NonTerminal(second));
         g.add_edge(root_idx, second_idx, Edge::default());
         let term1 = Terminal::new("t1", "TERM1", 0);
@@ -528,7 +524,7 @@ mod tests {
     fn insert_unks_nonproj() {
         // non projective tree, where one inserted node collects two nodes.
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
@@ -556,15 +552,15 @@ mod tests {
             .unwrap();
 
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
         g.add_edge(root_idx, first_idx, Edge::default());
-        let first_unk = NonTerminal::new("UNK", Span::new_continuous(1, 2));
+        let first_unk = NonTerminal::new("UNK", Span::new(1, 2));
         let first_unk_idx = g.add_node(Node::NonTerminal(first_unk));
         g.add_edge(root_idx, first_unk_idx, Edge::default());
-        let second_unk = NonTerminal::new("UNK", Span::new_continuous(3, 5));
+        let second_unk = NonTerminal::new("UNK", Span::new(3, 5));
         let second_unk_idx = g.add_node(Node::NonTerminal(second_unk));
         g.add_edge(root_idx, second_unk_idx, Edge::default());
         let term1 = Terminal::new("t1", "TERM1", 0);
@@ -589,8 +585,8 @@ mod tests {
     #[test]
     fn project_node_indices() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
-        let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let first = NonTerminal::new("FIRST", Span::new(0, 2));
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
         let term3 = Terminal::new("t3", "TERM3", 2);
@@ -624,12 +620,12 @@ mod tests {
     #[test]
     fn project_node_indices_nonprojective() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
         let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
+        let second = NonTerminal::new("SECOND", Span::new(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);
         let term5 = Terminal::new("t5", "TERM5", 4);
         let root_idx = g.add_node(Node::NonTerminal(root));

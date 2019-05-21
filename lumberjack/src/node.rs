@@ -124,7 +124,7 @@ impl Node {
         let span = span.into();
         match self {
             Node::Terminal(t) => {
-                if let Span::Discontinuous(_) = &span {
+                if span.skips().is_some() {
                     return Err(format_err!("Can't assign discontinuous span to terminal."));
                 } else if span.n_indices() != 1 {
                     return Err(format_err!("Terminals cover only single indices."));
@@ -401,7 +401,7 @@ mod test {
         assert_eq!(nonterminal.nonterminal_mut().unwrap().set_span(3), 0.into());
         assert_eq!(nonterminal.span(), &3.into());
         nonterminal.extend_span().unwrap();
-        assert_eq!(nonterminal.span(), &Span::new_continuous(3, 5));
+        assert_eq!(nonterminal.span(), &Span::new(3, 5));
         assert_eq!(
             nonterminal
                 .nonterminal_mut()

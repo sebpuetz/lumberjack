@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn project_node_labels() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 6));
         let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
@@ -400,12 +400,12 @@ mod tests {
     #[test]
     fn project_node_ids() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 5));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
         let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("L", Span::new_continuous(3, 4));
+        let second = NonTerminal::new("L", Span::new(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);
         let term5 = Terminal::new("t5", "TERM5", 4);
         let root_idx = g.add_node(Node::NonTerminal(root));
@@ -475,9 +475,9 @@ mod tests {
         let mut g = StableGraph::new();
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 5));
-        let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
-        let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
+        let first = NonTerminal::new("FIRST", Span::new(0, 2));
+        let second = NonTerminal::new("SECOND", Span::new(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term3 = Terminal::new("t3", "TERM3", 2);
@@ -516,12 +516,12 @@ mod tests {
     fn some_tree() -> Tree {
         //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new_continuous(0, 5));
-        let first = NonTerminal::new("FIRST", Span::new_continuous(0, 2));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
+        let first = NonTerminal::new("FIRST", Span::new(0, 2));
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
         let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("SECOND", Span::new_continuous(3, 4));
+        let second = NonTerminal::new("SECOND", Span::new(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);
         let term5 = Terminal::new("t5", "TERM5", 4);
         let root_idx = g.add_node(Node::NonTerminal(root));
