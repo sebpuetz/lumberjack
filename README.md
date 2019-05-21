@@ -19,13 +19,13 @@ cargo install --git https://github.com/sebpuetz/lumberjack
 * Convert treebank in NEGRA export 4 format to bracketed TueBa V2 format
 ```bash
 lumberjack-conversion --input_file treebank.negra --input_format negra \
-    --output_format tueba --output_format treebank.tueba
+    --output_format tueba --output_file treebank.filtered
 ``` 
 * Retain only root node, NPs and VPs and print to simple bracketed format:
 ```bash
 echo "NP PP" > filter_set.txt
 lumberjack-conversion --input_file treebank.simple --input_format simple \
-    --output_format tueba --output_format treebank.simple \
+    --output_format tueba --output_file treebank.filtered \
     --filter filter_set.txt
 ```
 * Convert from treebank in simple bracketed to CONLLX format and annotate
