@@ -7,8 +7,8 @@ use fixedbitset::FixedBitSet;
 use petgraph::prelude::{Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
 use petgraph::visit::{Bfs, Dfs, DfsPostOrder, VisitMap};
 
-use crate::util::LabelSet;
-use crate::{Edge, Node, Span};
+use crate::util::{Climber, LabelSet};
+use crate::{Continuity, Edge, Node, NonTerminal, Span};
 
 /// `Tree`
 ///
@@ -80,6 +80,128 @@ impl Tree {
         self.graph
             .edges_directed(node, Direction::Outgoing)
             .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
+    }
+
+    /// Insert a new unary node.
+    ///
+    /// Inserts a new unary node above `child` and returns the index of the inserted node.
+    pub fn insert_unary<S>(&mut self, child: NodeIndex, node_label: S) -> NodeIndex
+    where
+        S: Into<String>,
+    {
+        let span = self[child].span().to_owned();
+        let node = Node::NonTerminal(NonTerminal::new(node_label, span));
+        let insert = self.graph.add_node(node);
+        if let Some((parent, old_edge_idx)) = self.parent(child) {
+            let old_edge = self.graph.remove_edge(old_edge_idx).unwrap();
+            self.graph.add_edge(parent, insert, Edge::default());
+            self.graph.add_edge(insert, child, old_edge);
+        } else {
+            self.graph.add_edge(insert, child, Edge::default());
+            if child == self.root {
+                self.root = insert;
+            }
+        }
+        insert
+    }
+
+    /// Remove a node.
+    ///
+    /// This method will remove a node and attach all its children to the node above.
+    ///
+    /// Returns `Err` without mutating the tree if the structure is broken by the removal:
+    ///   * The last node can't be removed.
+    ///   * The root can't be removed if it has more than one outgoing edge.
+    ///   * `Terminal`s can only be removed if they are not the last node in the branch.
+    ///
+    /// Otherwise return `Ok(node)`.
+    ///
+    /// Panics if the node is not in the tree.
+    ///
+    /// Removing a `Terminal` is fairly expensive since the spans for all nodes in the `Tree` will
+    /// be recalculated. Removing a `NonTerminal` is cheaper, the outgoing edges of the removed
+    /// node get attached to its parent, not changing the spans at all.
+    pub fn remove_node(&mut self, node: NodeIndex) -> Result<Node, Error> {
+        assert!(
+            self.graph.contains_node(node),
+            "Can't remove node that's not in the tree."
+        );
+        if self[node].is_terminal() {
+            self.remove_terminal(node)
+        } else {
+            self.remove_nonterminal(node)
+        }
+    }
+
+    /// Reattach a node.
+    ///
+    /// Remove `edge` and reattach the node to `new_parent` with an empty edge weight. This method
+    /// does not change the position of the reattached node wrt. linear order in the sentence.
+    ///
+    /// Returns `Err` if:
+    ///   * `edge` is the last outgoing edge of a node.
+    ///   * `new_parent` is a `Terminal` node.
+    ///
+    /// Returns `Ok(old_edge)` otherwise.
+    ///
+    /// Panics if any of the indices is not present in the tree.
+    pub fn reattach_node(&mut self, new_parent: NodeIndex, edge: EdgeIndex) -> Result<Edge, Error> {
+        assert!(
+            self.graph.contains_node(new_parent),
+            "Reattachment point has to be in the tree."
+        );
+        assert!(
+            self.graph.edge_weight(edge).is_some(),
+            "Edge to be removed has to be in the tree."
+        );
+
+        // ensure we're not removing the last child of a node and that the attachment point is NT
+        let (parent, child) = self.graph.edge_endpoints(edge).unwrap();
+        if self.siblings(child).count() == 0 && parent != new_parent {
+            return Err(format_err!("Last child of a node."));
+        } else if self[new_parent].is_terminal() {
+            return Err(format_err!("Terminal node as new parent."));
+        } else if child == new_parent {
+            return Err(format_err!("New parent is node itself."));
+        }
+
+        let mut climber = Climber::new(parent, self);
+        // climb tree to check if the old parent is dominated by the new parent
+        while let Some(node) = climber.next(self) {
+            // if new parent is higher in the tree, we need to remove the indices from the old
+            // parent's span
+            if new_parent == node {
+                let coverage = self[child].span().into_iter().collect::<Vec<_>>();
+                let before = self[parent].continuity();
+                let after = self[parent]
+                    .nonterminal_mut()
+                    .unwrap()
+                    .remove_indices(coverage);
+                self.projectivity_change(before, after);
+                break;
+            }
+        }
+        let edge = self.graph.remove_edge(edge).unwrap();
+        self.graph.add_edge(new_parent, child, Edge::default());
+        let child_span = self[child].span().to_owned();
+
+        let mut climber = Climber::new(child, self);
+        while let Some(parent) = climber.next(self) {
+            // if new parent doesn't cover the child's span, extend new parent's span.
+            if self.graph[parent].span().covers_span(&child_span) {
+                break;
+            } else {
+                let before = self[parent].nonterminal().unwrap().continuity();
+                // extending the new parent's span can change projectivity
+                let after = self[parent]
+                    .nonterminal_mut()
+                    .unwrap()
+                    .merge_spans(&child_span);
+                self.projectivity_change(before, after);
+            };
+        }
+
+        Ok(edge)
     }
 
     /// Get an iterator over `node`'s siblings.
@@ -176,9 +298,61 @@ impl Tree {
 
 // (crate) private methods
 impl Tree {
+    pub(crate) fn projectivity_change(&mut self, before: Continuity, after: Continuity) -> usize {
+        match (before, after) {
+            (Continuity::Continuous, Continuity::Discontinuous) => self.num_non_projective += 1,
+            (Continuity::Discontinuous, Continuity::Continuous) => self.num_non_projective -= 1,
+            _ => (),
+        };
+        self.num_non_projective
+    }
+
     /// Get a mutable reference to the underlying `StableGraph`.
     pub(crate) fn graph_mut(&mut self) -> &mut StableGraph<Node, Edge> {
         &mut self.graph
+    }
+
+    /// Remove nonterminal node from the graph.
+    ///
+    /// Panics if a terminal node is given as argument.
+    fn remove_nonterminal(&mut self, nonterminal: NodeIndex) -> Result<Node, Error> {
+        assert!(
+            !self[nonterminal].is_terminal(),
+            "Remove Terminals with Tree::remove_terminal()"
+        );
+        if let Some((parent, _)) = self.parent(nonterminal) {
+            for (child, _) in self.children(nonterminal).collect::<Vec<_>>() {
+                self.graph.add_edge(parent, child, Edge::default());
+            }
+        } else if self.children(self.root).count() == 1 {
+            let (child, _) = self.children(self.root).next().unwrap();
+            self.root = child;
+        } else {
+            return Err(format_err!("Root has multiple outgoing edges."));
+        }
+
+        let node = self.graph.remove_node(nonterminal).unwrap();
+        if node.span().skips().is_some() {
+            self.num_non_projective -= 1;
+        }
+        Ok(node)
+    }
+
+    /// Remove a terminal from the graph.
+    ///
+    /// Panics if a nonterminal node is given as argument.
+    fn remove_terminal(&mut self, terminal: NodeIndex) -> Result<Node, Error> {
+        assert!(
+            self[terminal].is_terminal(),
+            "Remove NonTerminals with Tree::remove_nonterminal()"
+        );
+        if self.siblings(terminal).count() == 0 {
+            return Err(format_err!("Last terminal of a branch."));
+        }
+        self.compact_terminal_spans()?;
+        self.reset_nt_spans();
+        self.n_terminals -= 1;
+        Ok(self.graph.remove_node(terminal).unwrap())
     }
 
     /// Set root of the tree.
@@ -192,7 +366,6 @@ impl Tree {
         self.root = new_root;
     }
 
-    /// Set the tree's projectivity.
     pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
         self.num_non_projective = num_non_projective
     }
@@ -202,7 +375,6 @@ impl Tree {
     /// If a span was skipped because of e.g. removed terminals, restore the correct order.
     /// If two terminals with same span are present, alphabetical order of forms is used as the
     /// tie-breaker.
-    #[allow(dead_code)]
     pub(crate) fn compact_terminal_spans(&mut self) -> Result<(), Error> {
         let mut terminals = self.terminals().collect::<Vec<_>>();
         self.sort_indices(&mut terminals);
@@ -213,7 +385,6 @@ impl Tree {
     }
 
     /// Resets nonterminal spans based on terminal spans.
-    #[allow(dead_code)]
     pub(crate) fn reset_nt_spans(&mut self) {
         let mut dfs = DfsPostOrder::new(&self.graph, self.root);
         self.num_non_projective = 0;
@@ -381,6 +552,7 @@ mod tests {
 
     use petgraph::prelude::{NodeIndex, StableGraph};
 
+    use crate::io::PTBFormat;
     use crate::util::LabelSet;
     use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
 
@@ -497,6 +669,191 @@ mod tests {
     }
 
     #[test]
+    fn rm_terminal() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let terminals = tree.terminals().collect::<Vec<_>>();
+        let t3 = tree.remove_node(terminals[2]).unwrap();
+        assert_eq!(t3, Node::Terminal(Terminal::new("t3", "TERM3", 2)));
+        assert!(tree.remove_node(terminals[3]).is_err());
+    }
+
+    #[test]
+    fn rm_nonterminal() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let nt = tree
+            .nonterminals()
+            .filter(|nt| tree[*nt].label() == "SECOND")
+            .next()
+            .unwrap();
+
+        let nt = tree.remove_node(nt).unwrap();
+        assert_eq!(nt, Node::NonTerminal(NonTerminal::new("SECOND", 3)));
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (TERM4 t4) (TERM5 t5))"
+        );
+    }
+
+    #[test]
+    fn rm_minimal_tree() {
+        let mut tree = PTBFormat::Simple.string_to_tree("(ROOT (T t))").unwrap();
+        let root = tree.root();
+        let root = tree.remove_node(root).unwrap();
+        assert_eq!(root, Node::NonTerminal(NonTerminal::new("ROOT", 0)));
+        assert_eq!(
+            &tree[tree.root()],
+            &Node::Terminal(Terminal::new("t", "T", 0))
+        );
+        assert_eq!(PTBFormat::Simple.tree_to_string(&tree).unwrap(), "(T t)");
+    }
+
+    #[test]
+    fn rm_fail_last_node() {
+        let mut tree = PTBFormat::Simple.string_to_tree("(T t)").unwrap();
+        let root = tree.root();
+        assert!(tree.remove_node(root).is_err());
+    }
+
+    #[test]
+    fn rm_root_multiple_attached() {
+        let mut tree = PTBFormat::Simple
+            .string_to_tree("(ROOT (T t) (T2 t2))")
+            .unwrap();
+        let root = tree.root();
+        assert!(tree.remove_node(root).is_err());
+    }
+
+    #[test]
+    fn reattach_terminal_to_same_parent() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let terminals = tree.terminals().collect::<Vec<_>>();
+        let (parent, edge) = tree.parent(terminals[0]).unwrap();
+        assert_eq!(Edge::default(), tree.reattach_node(parent, edge).unwrap());
+        assert_eq!(tree, some_tree());
+    }
+
+    #[test]
+    fn reattach_terminal() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let terminals = tree.terminals().collect::<Vec<_>>();
+        let (_, edge) = tree.parent(terminals[0]).unwrap();
+        let root = tree.root();
+        assert_eq!(Edge::default(), tree.reattach_node(root, edge).unwrap());
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (TERM1 t1) (FIRST (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
+        );
+    }
+
+    #[test]
+    fn reattach_terminal_to_terminal() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let terminals = tree.terminals().collect::<Vec<_>>();
+        let (_, edge) = tree.parent(terminals[0]).unwrap();
+        assert!(tree.reattach_node(terminals[1], edge).is_err());
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
+        );
+    }
+
+    #[test]
+    fn reattach_last_terminal() {
+        let mut tree = some_tree();
+        let terminals = tree.terminals().collect::<Vec<_>>();
+        let (_, edge) = tree.parent(terminals[3]).unwrap();
+        let root = tree.root();
+        assert!(tree.reattach_node(root, edge).is_err());
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
+        );
+    }
+
+    #[test]
+    fn reattach_nt_to_self() {
+        //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = some_tree();
+        let nt = tree
+            .nonterminals()
+            .filter(|nt| tree[*nt].label() == "FIRST")
+            .next()
+            .unwrap();
+        let (_, edge) = tree.parent(nt).unwrap();
+        assert!(tree.reattach_node(nt, edge).is_err());
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
+        )
+    }
+
+    #[test]
+    fn reattach_nt_projective() {
+        let mut tree = PTBFormat::Simple.string_to_tree("(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (MOVE (TERM3 t3)) (SECOND (TERM4 t4)) (TERM5 t5))").unwrap();
+        let nt = tree
+            .nonterminals()
+            .filter(|nt| tree[*nt].label() == "MOVE")
+            .next()
+            .unwrap();
+        let target = tree
+            .nonterminals()
+            .filter(|nt| tree[*nt].label() == "FIRST")
+            .next()
+            .unwrap();
+        let (_, edge) = tree.parent(nt).unwrap();
+        assert_eq!(Edge::default(), tree.reattach_node(target, edge).unwrap());
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2) (MOVE (TERM3 t3))) (SECOND (TERM4 t4)) (TERM5 t5))"
+        )
+    }
+
+    #[test]
+    fn reattach_nonprojective() {
+        let mut graph = StableGraph::new();
+        let root = graph.add_node(NonTerminal::new("ROOT", Span::new(0, 3)).into());
+        let a = graph.add_node(NonTerminal::new("A", Span::from_vec(vec![0, 2]).unwrap()).into());
+        let a_term = graph.add_node(Terminal::new("a", "a_term", 0).into());
+        let b_term = graph.add_node(Terminal::new("b", "b_term", 2).into());
+        let c_term = graph.add_node(Terminal::new("c", "c_term", 1).into());
+        let a_nt_edge = graph.add_edge(root, a, Edge::default());
+        let c_edge = graph.add_edge(root, c_term, Edge::default());
+        graph.add_edge(a, a_term, Edge::default());
+        let b_edge = graph.add_edge(a, b_term, Edge::default());
+        let non_proj = Tree::new(graph, 3, root, 1);
+        let mut tree = non_proj.clone();
+
+        tree.reattach_node(a, c_edge).unwrap();
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree).unwrap(),
+            "(ROOT (A (a_term a) (c_term c) (b_term b)))"
+        );
+        let (_, edge) = tree.parent(c_term).unwrap();
+        tree.reattach_node(root, edge).unwrap();
+        assert_eq!(non_proj, tree);
+
+        let mut tree_2 = non_proj.clone();
+        tree_2.reattach_node(root, b_edge).unwrap();
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree_2).unwrap(),
+            "(ROOT (A (a_term a)) (c_term c) (b_term b))"
+        );
+
+        let mut tree_2 = non_proj.clone();
+        tree_2.reattach_node(a, c_edge).unwrap();
+        tree_2.reattach_node(root, a_nt_edge).unwrap();
+        assert_eq!(
+            PTBFormat::Simple.tree_to_string(&tree_2).unwrap(),
+            "(ROOT (A (a_term a) (c_term c) (b_term b)))"
+        );
+    }
+
+    #[test]
     fn siblings() {
         let tree = some_tree();
         assert!(tree.siblings(tree.root()).next().is_none());
@@ -518,7 +875,7 @@ mod tests {
         //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
         let mut g = StableGraph::new();
         let term1 = Terminal::new("t1", "TERM1", 0);
-        let term2 = Terminal::new("t2", "TERM1", 1);
+        let term2 = Terminal::new("t2", "TERM2", 1);
         let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let first = NonTerminal::new("FIRST", Span::new(0, 2));
         let second = NonTerminal::new("SECOND", Span::new(3, 4));
@@ -563,7 +920,7 @@ mod tests {
         let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let first = NonTerminal::new("FIRST", Span::new(0, 2));
         let term1 = Terminal::new("t1", "TERM1", 0);
-        let term2 = Terminal::new("t2", "TERM1", 1);
+        let term2 = Terminal::new("t2", "TERM2", 1);
         let term3 = Terminal::new("t3", "TERM3", 2);
         let second = NonTerminal::new("SECOND", Span::new(3, 4));
         let term4 = Terminal::new("t4", "TERM4", 3);

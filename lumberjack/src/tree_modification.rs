@@ -2,7 +2,7 @@ use failure::Error;
 use petgraph::prelude::DfsPostOrder;
 
 use crate::util::{Climber, LabelSet};
-use crate::{Edge, Node, NonTerminal, Span, Tree};
+use crate::{Node, NonTerminal, Span, Tree};
 
 /// Trait to annotate Part of Speech tags.
 ///
@@ -191,51 +191,24 @@ impl TreeOps for Tree {
         let terminals = self.terminals().collect::<Vec<_>>();
         for terminal in terminals {
             let mut cur = terminal;
-            // tree of form (S (T t)) has 2 nodes, 1 terminal, S will be removed.
-            // node_count - n_terminals specifies number of removed nodes.
-            let mut del = Vec::with_capacity(self.graph().node_count() - self.n_terminals());
             let mut climber = Climber::new(terminal, self);
-            let mut prev_span = self[terminal].span().clone();
-            let mut chain = Vec::new();
 
             while let Some(node) = climber.next(self) {
-                if self[node].span() == &prev_span {
+                if self[node].span() == self[cur].span() {
                     // spans are equal in unary branches.
-                    del.push(node);
-                    match self[node].nonterminal() {
-                        Some(nt) => {
-                            chain.push(nt.label().to_owned());
-                        }
-                        None => return Err(format_err!("Terminal dominating NT.")),
+                    let label = self.remove_node(node).unwrap().set_label(String::new());
+                    let features = self[cur].features_mut();
+                    let chain = features
+                        .get_val("unary_chain")
+                        .map(|chain| format!("{}{}{}", chain, delim, label))
+                        .unwrap_or_else(|| label);
+                    features.insert("unary_chain", Some(chain));
+                    if node == self.root() {
+                        self.set_root(cur);
                     }
-                } else if chain.is_empty() {
-                    // no chain and non-matching spans means current node is branching.
-                    prev_span = self[node].span().clone();
-                    cur = node;
                 } else {
-                    // non-matching spans and non-empty label means that a unary chain has ended
-                    self[cur]
-                        .features_mut()
-                        .insert("unary_chain", Some(chain.join(delim)));
-                    chain.clear();
-                    // add new node bridging the node-to-be-removed
-                    self.graph_mut().add_edge(node, cur, Edge::default());
-                    prev_span = self[node].span().clone();
                     cur = node;
                 }
-            }
-
-            if !chain.is_empty() {
-                // empty label means, root is attached via unary chain.
-                self.set_root(cur);
-                self[cur]
-                    .features_mut()
-                    .insert("unary_chain", Some(chain.join(delim)));
-            }
-
-            // remove unary chain nodes.
-            for del_node in del {
-                self.graph_mut().remove_node(del_node);
             }
         }
         Ok(())
@@ -243,35 +216,13 @@ impl TreeOps for Tree {
 
     fn restore_unary_chains(&mut self, delim: &str) -> Result<(), Error> {
         let nodes = self.graph().node_indices().collect::<Vec<_>>();
-        for node in nodes {
-            let chain = if let Some(chain) = self[node].features_mut().remove("unary_chain") {
-                chain
+        for mut cur in nodes {
+            if let Some(chain) = self[cur].features_mut().remove("unary_chain") {
+                for label in chain.split(delim) {
+                    cur = self.insert_unary(cur, label);
+                }
             } else {
                 continue;
-            };
-
-            let mut cur = node;
-            let attachment_handle = if let Some((parent_node, parent_edge)) = self.parent(node) {
-                // remove edge to existing parent and keep handle to re-attach that node
-                self.graph_mut().remove_edge(parent_edge);
-                Some(parent_node)
-            } else {
-                // no parent means a chain was collapsed into the root node.
-                None
-            };
-
-            for label in chain.split(delim) {
-                let nt = Node::NonTerminal(NonTerminal::new(label, self[node].span().clone()));
-                let new = self.graph_mut().add_node(nt);
-                self.graph_mut().add_edge(new, cur, Edge::default());
-                cur = new;
-            }
-
-            if let Some(attachment_handle) = attachment_handle {
-                self.graph_mut()
-                    .add_edge(attachment_handle, cur, Edge::default());
-            } else {
-                self.set_root(cur);
             };
         }
         Ok(())

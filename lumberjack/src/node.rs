@@ -234,7 +234,6 @@ impl NonTerminal {
     /// After merging, the NonTerminal will also cover those indices in `span`.
     ///
     /// Returns the NonTerminal's continuity after merging the Spans.
-    #[allow(dead_code)]
     pub(crate) fn merge_spans(&mut self, span: &Span) -> Continuity {
         let span = self.span.merge_spans(span);
         self.span = span;
@@ -248,7 +247,6 @@ impl NonTerminal {
     /// Remove indices from the NonTerminal's span.
     ///
     /// Returns the NonTerminal's continuity after removing the indices.
-    #[allow(dead_code)]
     pub(crate) fn remove_indices(
         &mut self,
         indices: impl IntoIterator<Item = usize>,

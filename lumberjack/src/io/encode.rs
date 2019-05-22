@@ -168,7 +168,11 @@ fn get_common(tree: &Tree, terminal: NodeIndex) -> Result<Option<(String, usize)
     let mut n_common = 0usize;
     let mut climber = Climber::new(terminal, tree);
     while let Some(parent) = climber.next(tree) {
-        if tree[parent].span().contains(idx + 1) && common.is_none() {
+        let span = tree[parent].span();
+        if span.skips().is_some() {
+            return Err(format_err!("Can't get lowest common ancestor"));
+        }
+        if span.contains(idx + 1) && common.is_none() {
             let common_nt = tree[parent]
                 .nonterminal()
                 .ok_or_else(|| format_err!("Terminal without parent:\n{}", tree[parent]))?;
