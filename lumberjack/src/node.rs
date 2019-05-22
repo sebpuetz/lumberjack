@@ -3,7 +3,7 @@ use std::mem;
 
 use failure::Error;
 
-use crate::{Features, Span};
+use crate::{Features, Projectivity, Span};
 
 /// Enum representing Nodes in a constituency tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -191,6 +191,33 @@ impl NonTerminal {
 
     pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Span {
         mem::replace(&mut self.span, span.into())
+    }
+
+    /// Merge the coverage of the NonTerminal with a span.
+    ///
+    /// After merging, the NonTerminal will also cover those indices in `span`.
+    ///
+    /// Returns whether the changes made this span non-continuous.
+    #[allow(dead_code)]
+    pub(crate) fn merge_spans(&mut self, span: &Span) -> Projectivity {
+        let span = self.span.merge_spans(span);
+        self.span = span;
+        if self.span.skips().is_some() {
+            Projectivity::Nonprojective
+        } else {
+            Projectivity::Projective
+        }
+    }
+
+    /// Remove indices from the NonTerminal's span.
+    ///
+    /// Returns whether the changes made this span non-continuous.
+    #[allow(dead_code)]
+    pub(crate) fn remove_indices(
+        &mut self,
+        indices: impl IntoIterator<Item = usize>,
+    ) -> Projectivity {
+        self.span.remove_indices(indices)
     }
 
     /// Get this `NonTerminal`'s `Features`.
