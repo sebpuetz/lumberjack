@@ -8,13 +8,6 @@ use petgraph::prelude::{Bfs, DfsPostOrder, Direction, EdgeIndex, EdgeRef, NodeIn
 use crate::util::LabelSet;
 use crate::{Edge, Node, Span};
 
-/// Enum describing whether a tree is projective.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum Projectivity {
-    Projective,
-    Nonprojective,
-}
-
 /// `Tree`
 ///
 /// `Tree`s represent constituency trees and consist of `Node`s. The nodes are either
@@ -24,7 +17,7 @@ pub struct Tree {
     graph: StableGraph<Node, Edge>,
     n_terminals: usize,
     root: NodeIndex,
-    projectivity: Projectivity,
+    num_non_projective: usize,
 }
 
 impl Tree {
@@ -32,13 +25,13 @@ impl Tree {
         graph: StableGraph<Node, Edge>,
         n_terminals: usize,
         root: NodeIndex,
-        projectivity: Projectivity,
+        num_non_projective: usize,
     ) -> Self {
         Tree {
             graph,
             n_terminals,
             root,
-            projectivity,
+            num_non_projective,
         }
     }
 
@@ -138,13 +131,13 @@ impl Tree {
     }
 
     /// Returns whether the tree is projective.
-    pub fn projective(&self) -> bool {
-        self.projectivity == Projectivity::Projective
+    pub fn is_projective(&self) -> bool {
+        self.num_non_projective == 0
     }
 
     /// Set the tree's projectivity.
-    pub(crate) fn set_projectivity(&mut self, projectivity: Projectivity) {
-        self.projectivity = projectivity
+    pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
+        self.num_non_projective = num_non_projective
     }
 
     /// Project indices of `NonTerminal`s onto `Terminal`s.
@@ -248,6 +241,7 @@ impl Tree {
     #[allow(dead_code)]
     pub(crate) fn reset_nt_spans(&mut self) {
         let mut dfs = DfsPostOrder::new(&self.graph, self.root);
+        self.num_non_projective = 0;
         while let Some(node) = dfs.next(&self.graph) {
             if !self[node].is_terminal() {
                 let coverage = self
@@ -255,6 +249,9 @@ impl Tree {
                     .flat_map(|child| self[child].span().into_iter())
                     .collect::<Vec<_>>();
                 let span = Span::from_vec(coverage).unwrap();
+                if span.skips().is_some() {
+                    self.num_non_projective += 1;
+                }
                 self[node].nonterminal_mut().unwrap().set_span(span);
             }
         }
@@ -338,7 +335,7 @@ mod tests {
     use petgraph::prelude::{NodeIndex, StableGraph};
 
     use crate::util::LabelSet;
-    use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+    use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
 
     #[test]
     fn reset_spans() {
@@ -365,7 +362,7 @@ mod tests {
     #[test]
     fn project_node_labels() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 1));
         let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
@@ -389,7 +386,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let tree = Tree::new(g, 5, root_idx, 0);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_tag_set(&LabelSet::Positive(tags));
@@ -424,7 +421,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let tree = Tree::new(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("L".into());
         let indices = tree.project_ids(&LabelSet::Positive(tags));
@@ -497,7 +494,7 @@ mod tests {
         g.add_edge(second_idx, term4_idx, Edge::default());
         g.add_edge(root_idx, first_idx, Edge::default());
         let some_tree = some_tree();
-        let mut other_tree = Tree::new(g.clone(), 5, root_idx, Projectivity::Projective);
+        let mut other_tree = Tree::new(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
         other_tree[term2_idx]
             .terminal_mut()
@@ -505,11 +502,11 @@ mod tests {
             .set_lemma(Some("some_lemma"));
         assert_ne!(some_tree, other_tree);
         g.remove_node(term2_idx);
-        let other_tree = Tree::new(g.clone(), 4, root_idx, Projectivity::Projective);
+        let other_tree = Tree::new(g.clone(), 4, root_idx, 0);
         assert_ne!(some_tree, other_tree);
         let new_t2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(first_idx, new_t2_idx, Edge::default());
-        let other_tree = Tree::new(g.clone(), 5, root_idx, Projectivity::Projective);
+        let other_tree = Tree::new(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
     }
 
@@ -540,6 +537,6 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        Tree::new(g, 5, root_idx, Projectivity::Projective)
+        Tree::new(g, 5, root_idx, 0)
     }
 }

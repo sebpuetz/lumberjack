@@ -7,7 +7,7 @@ use pest::Parser;
 use petgraph::stable_graph::StableGraph;
 
 use crate::io::NODE_ANNOTATION_FEATURE_KEY;
-use crate::{Edge, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
 
 /// Iterator over constituency trees in a NEGRA export file.
 ///
@@ -109,7 +109,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
     // map parent_id -> [(edge, child_id),[..]]
     let mut edges = HashMap::new();
     let mut n_terminals = 0;
-    let mut projectivity = Projectivity::Projective;
+    let mut num_non_projective = 0;
     for pair in pairs {
         match pair.as_rule() {
             Rule::terminal => {
@@ -137,7 +137,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
 
                 let span = Span::from_vec(coverage)?;
                 if span.skips().is_some() {
-                    projectivity = Projectivity::Nonprojective;
+                    num_non_projective += 1;
                 }
                 nonterminal.set_span(span);
 
@@ -174,7 +174,7 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                 for (edge, node) in edge_list {
                     graph.add_edge(root, node, edge);
                 }
-                return Ok(Tree::new(graph, n_terminals, root, projectivity));
+                return Ok(Tree::new(graph, n_terminals, root, num_non_projective));
             }
             _ => unreachable!(),
         }
@@ -256,7 +256,7 @@ mod tests {
     };
 
     use crate::io::NODE_ANNOTATION_FEATURE_KEY;
-    use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+    use crate::{Edge, Features, Node, NonTerminal, Span, Terminal, Tree};
 
     #[test]
     fn test_first10_ok() {
@@ -349,7 +349,7 @@ mod tests {
         g.add_edge(root, punct, Edge::default());
         g.add_edge(nxorg, a, Edge::from(Some("HD")));
         g.add_edge(nx, s, Edge::from(Some("HD")));
-        assert_eq!(tree, Tree::new(g, 5, root, Projectivity::Projective));
+        assert_eq!(tree, Tree::new(g, 5, root, 0));
     }
 
     #[test]

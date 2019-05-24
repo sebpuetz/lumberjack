@@ -2,7 +2,7 @@ use failure::Error;
 use petgraph::prelude::DfsPostOrder;
 
 use crate::util::{Climber, LabelSet};
-use crate::{Edge, Node, NonTerminal, Projectivity, Span, Tree};
+use crate::{Edge, Node, NonTerminal, Span, Tree};
 
 /// Trait to annotate Part of Speech tags.
 ///
@@ -288,7 +288,9 @@ pub trait Projectivize {
 
 impl Projectivize for Tree {
     fn projectivize(&mut self) {
-        if !self.projective() {
+        // TODO use n_non_projective counter to stop early
+        // TODO sort terminals by idx
+        if !self.is_projective() {
             let terminals = self.terminals().collect::<Vec<_>>();;
             let mut dfs = DfsPostOrder::new(self.graph(), self.root());
             let mut log = vec![None; terminals.len()];
@@ -352,7 +354,7 @@ impl Projectivize for Tree {
                     .unwrap()
                     .set_span(Span::new(span.start, span.end));
             }
-            self.set_projectivity(Projectivity::Projective);
+            self.set_projectivity(0);
         }
     }
 }
@@ -366,7 +368,7 @@ mod tests {
     use super::{AnnotatePOS, TreeOps};
     use crate::io::PTBFormat;
     use crate::util::LabelSet;
-    use crate::{Edge, Features, Node, NonTerminal, Projectivity, Span, Terminal, Tree};
+    use crate::{Edge, Features, Node, NonTerminal, Span, Terminal, Tree};
 
     #[test]
     fn un_collapse_unary() {
@@ -427,7 +429,7 @@ mod tests {
     #[test]
     fn filter_nonproj() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
@@ -454,7 +456,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let tree = Tree::new(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("L".into());
         let mut filtered_tree = tree.clone();
@@ -463,7 +465,7 @@ mod tests {
             .unwrap();
 
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
@@ -486,7 +488,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let target = Tree::new(g, 5, root_idx, 1);
         assert_eq!(target, filtered_tree);
 
         let mut tags = HashSet::new();
@@ -496,7 +498,7 @@ mod tests {
             .filter_nonterminals(&LabelSet::Positive(tags))
             .unwrap();
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let second = NonTerminal::new("L1", Span::new(1, 2));
         let second_idx = g.add_node(Node::NonTerminal(second));
@@ -516,7 +518,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, Projectivity::Projective);
+        let target = Tree::new(g, 5, root_idx, 0);
         assert_eq!(target, filtered_tree);
     }
 
@@ -524,7 +526,7 @@ mod tests {
     fn insert_unks_nonproj() {
         // non projective tree, where one inserted node collects two nodes.
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
@@ -546,13 +548,13 @@ mod tests {
         g.add_edge(root_idx, term5_idx, Edge::default());
         let mut set = HashSet::new();
         set.insert("L".into());
-        let mut unk_tree = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let mut unk_tree = Tree::new(g, 5, root_idx, 1);
         unk_tree
             .insert_intermediate(&LabelSet::Positive(set), "UNK")
             .unwrap();
 
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let root_idx = g.add_node(Node::NonTerminal(root));
         let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
         let first_idx = g.add_node(Node::NonTerminal(first));
@@ -578,7 +580,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(second_unk_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let target = Tree::new(g, 5, root_idx, 1);
         assert_eq!(target, unk_tree);
     }
 
@@ -609,7 +611,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, Projectivity::Projective);
+        let tree = Tree::new(g, 5, root_idx, 0);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_nt_indices(&LabelSet::Positive(tags));
@@ -620,7 +622,7 @@ mod tests {
     #[test]
     fn project_node_indices_nonprojective() {
         let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 6));
+        let root = NonTerminal::new("ROOT", Span::new(0, 5));
         let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
         let term1 = Terminal::new("t1", "TERM1", 0);
         let term2 = Terminal::new("t2", "TERM1", 1);
@@ -644,7 +646,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, Projectivity::Nonprojective);
+        let tree = Tree::new(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_nt_indices(&LabelSet::Positive(tags));

@@ -2,8 +2,14 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::Projectivity;
 use failure::Error;
+
+/// Enum describing whether a span is continuous.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum Continuity {
+    Continuous,
+    Discontinuous,
+}
 
 /// Span of a node.
 ///
@@ -146,7 +152,7 @@ impl Span {
     pub(crate) fn remove_indices(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
-    ) -> Projectivity {
+    ) -> Continuity {
         // insert all indices to be removed into skips
         let start = self.start;
         let end = self.end;
@@ -180,9 +186,9 @@ impl Span {
 
         if self.skips.as_ref().map(HashSet::is_empty).unwrap_or(false) {
             self.skips = None;
-            Projectivity::Projective
+            Continuity::Continuous
         } else {
-            Projectivity::Nonprojective
+            Continuity::Discontinuous
         }
     }
 
@@ -281,7 +287,7 @@ impl<'a> Iterator for SpanIter<'a> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::Projectivity;
+    use crate::Continuity;
     use crate::Span;
 
     #[test]
@@ -336,12 +342,12 @@ mod tests {
         let skip = vec![3, 5].into_iter().collect::<HashSet<usize>>();
         let span = Span::new_with_skips(0, 10, skip);
         let mut clone = span.clone();
-        assert_eq!(Projectivity::Projective, clone.remove_indices(0..5));
+        assert_eq!(Continuity::Continuous, clone.remove_indices(0..5));
         assert_eq!(
             clone,
             Span::from_vec((6..10).into_iter().collect()).unwrap()
         );
-        assert_eq!(Projectivity::Nonprojective, clone.remove_indices(vec![7]));
+        assert_eq!(Continuity::Discontinuous, clone.remove_indices(vec![7]));
         assert_eq!(clone, Span::from_vec(vec![6, 8, 9]).unwrap());
     }
     #[test]
@@ -357,7 +363,7 @@ mod tests {
         let skip = vec![3, 5].into_iter().collect::<HashSet<usize>>();
         let span = Span::new_with_skips(0, 10, skip);
         let mut other = span.clone();
-        assert_eq!(Projectivity::Nonprojective, other.remove_indices(vec![6]));
+        assert_eq!(Continuity::Discontinuous, other.remove_indices(vec![6]));
         other = other.merge_spans(&span);
         assert_eq!(other, span);
 

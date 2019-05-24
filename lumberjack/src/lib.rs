@@ -8,7 +8,7 @@ pub mod io;
 pub use io::{NegraReader, PTBReader, PTBWriter, WriteTree};
 
 mod tree;
-pub use tree::{Projectivity, Tree};
+pub use tree::Tree;
 
 mod edge;
 pub use edge::Edge;
@@ -20,7 +20,7 @@ mod node;
 pub use node::{Node, NonTerminal, Terminal};
 
 mod span;
-pub use span::Span;
+pub use span::{Continuity, Span};
 
 mod tree_modification;
 pub use tree_modification::{AnnotatePOS, Projectivize, TreeOps};

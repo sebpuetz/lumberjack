@@ -17,7 +17,7 @@ use failure::Error;
 use crate::tree::Tree;
 use crate::tree_modification::TreeOps;
 use crate::util::{Climber, LabelSet};
-use crate::{Edge, Node, NonTerminal, Projectivity, Terminal};
+use crate::{Edge, Node, NonTerminal, Terminal};
 use petgraph::prelude::{NodeIndex, StableGraph};
 use petgraph::Direction;
 
@@ -59,7 +59,7 @@ pub trait Encode {
 
 impl Encode for Tree {
     fn encode_absolute(&self) -> Result<AbsoluteEncoding, Error> {
-        if !self.projective() {
+        if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
         let terminals = self.terminals().collect::<Vec<_>>();
@@ -77,7 +77,7 @@ impl Encode for Tree {
     }
 
     fn annotate_absolute(&mut self) -> Result<(), Error> {
-        if !self.projective() {
+        if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
         let terminals = self.terminals().collect::<Vec<_>>();
@@ -100,7 +100,7 @@ impl Encode for Tree {
     }
 
     fn encode_relative(&self) -> Result<RelativeEncoding, Error> {
-        if !self.projective() {
+        if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
         let mut prev_n = 0;
@@ -129,7 +129,7 @@ impl Encode for Tree {
     }
 
     fn annotate_relative(&mut self) -> Result<(), Error> {
-        if !self.projective() {
+        if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
         let terminals = self.terminals().collect::<Vec<_>>();
@@ -297,7 +297,7 @@ impl Decode for Tree {
             }
         }
 
-        let mut tree = Tree::new(graph, n_terminals, root_idx, Projectivity::Projective);
+        let mut tree = Tree::new(graph, n_terminals, root_idx, 0);
         tree.reset_nt_spans();
         tree
     }

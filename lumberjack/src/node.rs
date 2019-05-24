@@ -3,7 +3,7 @@ use std::mem;
 
 use failure::Error;
 
-use crate::{Features, Projectivity, Span};
+use crate::{Features, Continuity, Span};
 
 /// Enum representing Nodes in a constituency tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,6 +51,14 @@ impl Node {
             Node::Terminal(_) => None,
             Node::NonTerminal(ref mut inner) => Some(inner),
         }
+    }
+
+    /// Returns whether this node's span is continuous.
+    ///
+    /// This does **not** return whether this node introduces a edge cutting another node's span.
+    /// It does return whether this node's span is continuous.
+    pub fn is_continuous(&self) -> bool {
+        self.span().skips().is_some()
     }
 
     /// Get a `Option<&mut Terminal>`.
@@ -189,6 +197,14 @@ impl NonTerminal {
         }
     }
 
+    /// Returns whether this NonTerminal's Span is continuous.
+    ///
+    /// This does **not** return whether this nonterminal introduces a edge cutting another node's
+    /// span. It does return whether this node's span is continuous.
+    pub fn is_continuous(&self) -> bool {
+        self.span.skips().is_some()
+    }
+
     pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Span {
         mem::replace(&mut self.span, span.into())
     }
@@ -197,26 +213,26 @@ impl NonTerminal {
     ///
     /// After merging, the NonTerminal will also cover those indices in `span`.
     ///
-    /// Returns whether the changes made this span non-continuous.
+    /// Returns the NonTerminal's continuity after merging the Spans.
     #[allow(dead_code)]
-    pub(crate) fn merge_spans(&mut self, span: &Span) -> Projectivity {
+    pub(crate) fn merge_spans(&mut self, span: &Span) -> Continuity {
         let span = self.span.merge_spans(span);
         self.span = span;
         if self.span.skips().is_some() {
-            Projectivity::Nonprojective
+            Continuity::Discontinuous
         } else {
-            Projectivity::Projective
+            Continuity::Continuous
         }
     }
 
     /// Remove indices from the NonTerminal's span.
     ///
-    /// Returns whether the changes made this span non-continuous.
+    /// Returns the NonTerminal's continuity after removing the indices.
     #[allow(dead_code)]
     pub(crate) fn remove_indices(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
-    ) -> Projectivity {
+    ) -> Continuity {
         self.span.remove_indices(indices)
     }
 
