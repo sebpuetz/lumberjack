@@ -3,7 +3,7 @@ use std::mem;
 
 use failure::Error;
 
-use crate::{Features, Continuity, Span};
+use crate::{Continuity, Features, Span};
 
 /// Enum representing Nodes in a constituency tree.
 #[derive(Clone, Debug, Eq, PartialEq)]

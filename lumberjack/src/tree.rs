@@ -109,35 +109,14 @@ impl Tree {
         }
     }
 
-    /// Set root of the tree.
-    ///
-    /// Panics if the new root index is invalid.
-    pub(crate) fn set_root(&mut self, new_root: NodeIndex) {
-        assert!(
-            self.graph.contains_node(new_root),
-            "New root node has to be present in the  graph."
-        );
-        self.root = new_root;
-    }
-
     /// Get an immutable reference to the underlying `StableGraph`.
     pub fn graph(&self) -> &StableGraph<Node, Edge> {
         &self.graph
     }
 
-    /// Get a mutable reference to the underlying `StableGraph`.
-    pub(crate) fn graph_mut(&mut self) -> &mut StableGraph<Node, Edge> {
-        &mut self.graph
-    }
-
     /// Returns whether the tree is projective.
     pub fn is_projective(&self) -> bool {
         self.num_non_projective == 0
-    }
-
-    /// Set the tree's projectivity.
-    pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
-        self.num_non_projective = num_non_projective
     }
 
     /// Project indices of `NonTerminal`s onto `Terminal`s.
@@ -190,36 +169,29 @@ impl Tree {
         }
         ids
     }
+}
 
-    // helper method to sort a vec of node indices
-    // order is determined by:
-    // 1. lower bound of span (starting point of span)
-    // 2. upper bound of span (end point of span)
-    // 3. number of covered indices by span
-    // 4. Inner nodes before terminal nodes
-    // 5. alphabetical order
-    fn sort_indices(&self, indices: &mut Vec<NodeIndex>) {
-        indices.sort_by(
-            |node1, node2| match self[*node1].span().cmp(&self[*node2].span()) {
-                Ordering::Equal => match (&self[*node1], &self[*node2]) {
-                    (Node::NonTerminal(_), Node::Terminal(_)) => Ordering::Greater,
-                    (Node::Terminal(_), Node::NonTerminal(_)) => Ordering::Less,
-                    (Node::NonTerminal(nt1), Node::NonTerminal(nt2)) => {
-                        let order = self
-                            .children(*node1)
-                            .count()
-                            .cmp(&self.children(*node2).count());
-                        if order != Ordering::Equal {
-                            order
-                        } else {
-                            nt1.label().cmp(nt2.label())
-                        }
-                    }
-                    (Node::Terminal(t1), Node::Terminal(t2)) => t1.form().cmp(t2.form()),
-                },
-                ordering => ordering,
-            },
+// (crate) private methods
+impl Tree {
+    /// Get a mutable reference to the underlying `StableGraph`.
+    pub(crate) fn graph_mut(&mut self) -> &mut StableGraph<Node, Edge> {
+        &mut self.graph
+    }
+
+    /// Set root of the tree.
+    ///
+    /// Panics if the new root index is invalid.
+    pub(crate) fn set_root(&mut self, new_root: NodeIndex) {
+        assert!(
+            self.graph.contains_node(new_root),
+            "New root node has to be present in the  graph."
         );
+        self.root = new_root;
+    }
+
+    /// Set the tree's projectivity.
+    pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
+        self.num_non_projective = num_non_projective
     }
 
     /// Reset terminal spans to increasing by 1 at each step.
@@ -255,6 +227,37 @@ impl Tree {
                 self[node].nonterminal_mut().unwrap().set_span(span);
             }
         }
+    }
+
+    // helper method to sort a vec of node indices
+    // order is determined by:
+    // 1. lower bound of span (starting point of span)
+    // 2. upper bound of span (end point of span)
+    // 3. number of covered indices by span
+    // 4. Inner nodes before terminal nodes
+    // 5. alphabetical order
+    pub(crate) fn sort_indices(&self, indices: &mut Vec<NodeIndex>) {
+        indices.sort_by(
+            |node1, node2| match self[*node1].span().cmp(&self[*node2].span()) {
+                Ordering::Equal => match (&self[*node1], &self[*node2]) {
+                    (Node::NonTerminal(_), Node::Terminal(_)) => Ordering::Greater,
+                    (Node::Terminal(_), Node::NonTerminal(_)) => Ordering::Less,
+                    (Node::NonTerminal(nt1), Node::NonTerminal(nt2)) => {
+                        let order = self
+                            .children(*node1)
+                            .count()
+                            .cmp(&self.children(*node2).count());
+                        if order != Ordering::Equal {
+                            order
+                        } else {
+                            nt1.label().cmp(nt2.label())
+                        }
+                    }
+                    (Node::Terminal(t1), Node::Terminal(t2)) => t1.form().cmp(t2.form()),
+                },
+                ordering => ordering,
+            },
+        );
     }
 }
 
