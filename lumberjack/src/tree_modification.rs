@@ -168,7 +168,7 @@ impl TreeOps for Tree {
             })?;
 
             // climb up until field specified in tag_set or root is found
-            let mut climber = Climber::new(node);
+            let mut climber = Climber::new(node, self);
             while let Some(parent_idx) = climber.next(&self) {
                 let parent = self[parent_idx]
                     .nonterminal()
@@ -194,7 +194,7 @@ impl TreeOps for Tree {
             // tree of form (S (T t)) has 2 nodes, 1 terminal, S will be removed.
             // node_count - n_terminals specifies number of removed nodes.
             let mut del = Vec::with_capacity(self.graph().node_count() - self.n_terminals());
-            let mut climber = Climber::new(terminal);
+            let mut climber = Climber::new(terminal, self);
             let mut prev_span = self[terminal].span().clone();
             let mut chain = Vec::new();
 
@@ -315,7 +315,7 @@ impl Projectivize for Tree {
                         }
                     }
 
-                    let mut climber = Climber::new(terminals[skipped]);
+                    let mut climber = Climber::new(terminals[skipped], self);
 
                     // cheap clone since terminal span is continuous (actually copy)
                     let mut reattach_span = self[terminals[skipped]].span().clone();

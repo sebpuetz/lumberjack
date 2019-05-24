@@ -158,7 +158,7 @@ impl Span {
             skips.extend(indices);
             skips
         } else {
-            self.skips = Some(indices.into_iter().collect::<HashSet<_>>());
+            self.skips = Some(indices.collect::<HashSet<_>>());
             self.skips.as_mut().unwrap()
         };
 

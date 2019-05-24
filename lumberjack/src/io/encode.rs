@@ -166,7 +166,7 @@ fn get_common(tree: &Tree, terminal: NodeIndex) -> Result<Option<(String, usize)
     let idx = tree[terminal].span().start;
     let mut common = None;
     let mut n_common = 0usize;
-    let mut climber = Climber::new(terminal);
+    let mut climber = Climber::new(terminal, tree);
     while let Some(parent) = climber.next(tree) {
         if tree[parent].span().contains(idx + 1) && common.is_none() {
             let common_nt = tree[parent]

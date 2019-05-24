@@ -37,7 +37,7 @@ fn main() {
         Some(
             matches
                 .value_of(PARENT)
-                .map_or("parent".to_string(), |s| s.to_string()),
+                .map_or("parent".to_string(), ToOwned::to_owned),
         )
     } else {
         None
