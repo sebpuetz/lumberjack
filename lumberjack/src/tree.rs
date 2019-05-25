@@ -82,15 +82,15 @@ impl Tree {
             .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
     }
 
-    /// Insert a new unary node.
+    /// Insert a new unary node above a node.
     ///
     /// Inserts a new unary node above `child` and returns the index of the inserted node.
-    pub fn insert_unary<S>(&mut self, child: NodeIndex, node_label: S) -> NodeIndex
+    pub fn insert_unary_above<S>(&mut self, child: NodeIndex, node_label: S) -> NodeIndex
     where
         S: Into<String>,
     {
         let span = self[child].span().to_owned();
-        let node = Node::NonTerminal(NonTerminal::new(node_label, span));
+        let node = NonTerminal::new(node_label, span).into();
         let insert = self.graph.add_node(node);
         if let Some((parent, old_edge_idx)) = self.parent(child) {
             let old_edge = self.graph.remove_edge(old_edge_idx).unwrap();
@@ -103,6 +103,37 @@ impl Tree {
             }
         }
         insert
+    }
+
+    /// Insert a new unary node below a node.
+    ///
+    /// Insert a new node that is dominated by `node` and dominates all children of `node`.
+    ///
+    /// Returns:
+    ///  * `NodeIndex` of the new node
+    ///  * `Err` if `node` is a terminal. The tree structure is unchanged when `Err` is returned.
+    pub fn insert_unary_below<S>(
+        &mut self,
+        node: NodeIndex,
+        node_label: S,
+    ) -> Result<NodeIndex, Error>
+    where
+        S: Into<String>,
+    {
+        if self[node].is_terminal() {
+            return Err(format_err!("Can't attach nodes to terminals."));
+        }
+        // collect children before attaching new node
+        let children = self.children(node).collect::<Vec<_>>();
+        let span = self[node].span().to_owned();
+        let new_node = NonTerminal::new(node_label, span).into();
+        let insert = self.graph.add_node(new_node);
+        self.graph.add_edge(node, insert, Edge::default());
+        for (child, edge) in children {
+            self.graph.remove_edge(edge).unwrap();
+            self.graph.add_edge(insert, child, Edge::default());
+        }
+        Ok(insert)
     }
 
     /// Remove a node.
@@ -666,6 +697,37 @@ mod tests {
             ],
             terminals
         );
+    }
+
+    #[test]
+    fn insert_unary_above() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+        let root = tree.root();
+        let new_root = tree.insert_unary_above(root, "NewRoot");
+        assert_eq!(tree.root(), new_root);
+        assert_eq!(
+            tree[tree.root()],
+            NonTerminal::new("NewRoot", Span::new(0, 5)).into()
+        );
+        assert_eq!("(NewRoot (ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5)))",
+                   PTBFormat::Simple.tree_to_string(&tree).unwrap());
+    }
+
+    #[test]
+    fn insert_unary_below() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+        let root = tree.root();
+        let below_root = tree.insert_unary_below(root, "BelowRoot").unwrap();
+        let (root_child, _) = tree.children(tree.root()).next().unwrap();
+        assert_eq!(below_root, root_child);
+        assert_eq!(
+            tree[root_child],
+            NonTerminal::new("BelowRoot", Span::new(0, 5)).into()
+        );
+        assert_eq!("(ROOT (BelowRoot (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5)))",
+                   PTBFormat::Simple.tree_to_string(&tree).unwrap());
     }
 
     #[test]

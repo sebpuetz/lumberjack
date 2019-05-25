@@ -219,7 +219,7 @@ impl TreeOps for Tree {
         for mut cur in nodes {
             if let Some(chain) = self[cur].features_mut().remove("unary_chain") {
                 for label in chain.split(delim) {
-                    cur = self.insert_unary(cur, label);
+                    cur = self.insert_unary_above(cur, label);
                 }
             } else {
                 continue;

@@ -310,16 +310,13 @@ impl Decode for Tree {
         self.filter_nonterminals(&LabelSet::Negative(
             vec!["DUMMY".to_string()].into_iter().collect(),
         ))?;
-        if let Some(label) = self[self.root()].nonterminal().map(NonTerminal::label) {
-            if label == "DUMMY" {
-                let (child, _) = self
-                    .children(self.root())
-                    .next()
-                    .ok_or_else(|| format_err!("Root without outgoing edge"))?;
-                let root = self.root();
-                self.graph_mut().remove_node(root);
-                self.set_root(child);
-            }
+        if self[self.root()]
+            .nonterminal()
+            .map(|nt| nt.label() == "DUMMY")
+            .unwrap_or(false)
+        {
+            let root = self.root();
+            self.remove_node(root)?;
         }
         Ok(())
     }
