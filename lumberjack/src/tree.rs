@@ -71,18 +71,27 @@ impl Tree {
     }
 
     /// Get an iterator over `node`'s children.
-    pub fn children<'a>(&'a self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + 'a {
+    pub fn children<'a>(
+        &'a self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + 'a {
         self.graph
             .edges_directed(node, Direction::Outgoing)
-            .map(|edge_ref| edge_ref.target())
+            .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
     }
 
     /// Get an iterator over `node`'s siblings.
-    pub fn siblings<'a>(&'a self, node: NodeIndex) -> Box<Iterator<Item = NodeIndex> + 'a> {
+    pub fn siblings<'a>(
+        &'a self,
+        node: NodeIndex,
+    ) -> Box<Iterator<Item = (NodeIndex, EdgeIndex)> + 'a> {
         if let Some((parent, _)) = self.parent(node) {
-            Box::new(self.children(parent).filter(move |&target| target != node))
+            Box::new(
+                self.children(parent)
+                    .filter(move |(target, _)| *target != node),
+            )
         } else {
-            Box::new(std::iter::empty::<NodeIndex<u32>>())
+            Box::new(std::iter::empty::<(NodeIndex, EdgeIndex)>())
         }
     }
 
@@ -218,7 +227,7 @@ impl Tree {
             if !self[node].is_terminal() {
                 let coverage = self
                     .children(node)
-                    .flat_map(|child| self[child].span().into_iter())
+                    .flat_map(|(child, _)| self[child].span().into_iter())
                     .collect::<Vec<_>>();
                 let span = Span::from_vec(coverage).unwrap();
                 if span.skips().is_some() {
@@ -263,9 +272,15 @@ impl Tree {
 
 // recursively check if at each level the trees are identical.
 fn eq_helper(tree_1_idx: NodeIndex, tree_1: &Tree, tree_2_idx: NodeIndex, tree_2: &Tree) -> bool {
-    let mut nodes1 = tree_1.children(tree_1_idx).collect::<Vec<_>>();
+    let mut nodes1 = tree_1
+        .children(tree_1_idx)
+        .map(|(n, _)| n)
+        .collect::<Vec<_>>();
     tree_1.sort_indices(&mut nodes1);
-    let mut nodes2 = tree_2.children(tree_2_idx).collect::<Vec<_>>();
+    let mut nodes2 = tree_2
+        .children(tree_2_idx)
+        .map(|(n, _)| n)
+        .collect::<Vec<_>>();
     tree_2.sort_indices(&mut nodes2);
 
     for (node1, node2) in nodes1.into_iter().zip(nodes2) {
@@ -460,7 +475,7 @@ mod tests {
         let siblings = tree
             .siblings(NodeIndex::new(1))
             .into_iter()
-            .map(|sibling| match tree.graph()[sibling] {
+            .map(|(sibling, _)| match tree.graph()[sibling] {
                 Node::NonTerminal(ref nt) => nt.label().to_string(),
                 Node::Terminal(ref t) => t.form().to_string(),
             })

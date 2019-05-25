@@ -308,7 +308,7 @@ impl Decode for Tree {
         ))?;
         if let Some(label) = self[self.root()].nonterminal().map(NonTerminal::label) {
             if label == "DUMMY" {
-                let child = self
+                let (child, _) = self
                     .children(self.root())
                     .next()
                     .ok_or_else(|| format_err!("Root without outgoing edge"))?;
