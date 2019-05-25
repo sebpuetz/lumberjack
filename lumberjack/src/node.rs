@@ -14,6 +14,18 @@ pub enum Node {
     Terminal(Terminal),
 }
 
+impl From<NonTerminal> for Node {
+    fn from(nt: NonTerminal) -> Self {
+        Node::NonTerminal(nt)
+    }
+}
+
+impl From<Terminal> for Node {
+    fn from(t: Terminal) -> Self {
+        Node::Terminal(t)
+    }
+}
+
 impl Node {
     /// Returns whether a `self` is `Terminal`.
     pub fn is_terminal(&self) -> bool {
@@ -57,8 +69,12 @@ impl Node {
     ///
     /// This does **not** return whether this node introduces a edge cutting another node's span.
     /// It does return whether this node's span is continuous.
-    pub fn is_continuous(&self) -> bool {
-        self.span().skips().is_some()
+    pub fn continuity(&self) -> Continuity {
+        if self.span().skips().is_some() {
+            Continuity::Discontinuous
+        } else {
+            Continuity::Continuous
+        }
     }
 
     /// Get a `Option<&mut Terminal>`.
@@ -201,8 +217,12 @@ impl NonTerminal {
     ///
     /// This does **not** return whether this nonterminal introduces a edge cutting another node's
     /// span. It does return whether this node's span is continuous.
-    pub fn is_continuous(&self) -> bool {
-        self.span.skips().is_some()
+    pub fn continuity(&self) -> Continuity {
+        if self.span().skips().is_some() {
+            Continuity::Discontinuous
+        } else {
+            Continuity::Continuous
+        }
     }
 
     pub(crate) fn set_span(&mut self, span: impl Into<Span>) -> Span {
