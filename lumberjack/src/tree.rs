@@ -19,21 +19,28 @@ pub struct Tree {
     graph: StableGraph<Node, Edge>,
     n_terminals: usize,
     root: NodeIndex,
-    num_non_projective: usize,
+    num_discontinuous: usize,
 }
 
 impl Tree {
-    pub(crate) fn new(
-        graph: StableGraph<Node, Edge>,
-        n_terminals: usize,
-        root: NodeIndex,
-        num_non_projective: usize,
-    ) -> Self {
+    /// Construct a new Tree with a single Terminal.
+    ///
+    /// ```
+    /// use lumberjack::Tree;
+    /// use lumberjack::io::PTBFormat;
+    ///
+    /// let tree = Tree::new("a", "A");
+    /// assert_eq!("(A a)", PTBFormat::Simple.tree_to_string(&tree).unwrap());
+    /// ```
+    pub fn new(form: impl Into<String>, pos: impl Into<String>) -> Self {
+        let terminal = Terminal::new(form, pos, 0);
+        let mut graph = StableGraph::new();
+        let root = graph.add_node(Node::from(terminal));
         Tree {
             graph,
-            n_terminals,
+            n_terminals: 1,
             root,
-            num_non_projective,
+            num_discontinuous: 0,
         }
     }
 
@@ -99,13 +106,16 @@ impl Tree {
             .filter(|t| *t != terminal)
             .collect::<Vec<_>>();
         for terminal in terminals {
-            let pos = self[terminal].span().start;
+            let terminal = self[terminal]
+                .terminal_mut()
+                .expect("Unexpected NonTerminal");
+            let pos = terminal.idx();
             if old_pos <= pos && pos <= index {
                 // shift to the right
-                self[terminal].set_span(pos - 1).unwrap();
+                terminal.set_idx(pos - 1);
             } else if index <= pos && pos <= old_pos {
                 // shift to the left
-                self[terminal].set_span(pos + 1).unwrap();
+                terminal.set_idx(pos + 1);
             }
         }
         self[terminal].set_span(index).unwrap();
@@ -118,11 +128,7 @@ impl Tree {
     /// Span.
     ///
     /// Panics if the specified parent node is a Terminal or if the index is out of bounds.
-    pub fn insert_terminal(
-        &mut self,
-        parent: NodeIndex,
-        terminal: Terminal,
-    ) -> Result<NodeIndex, Error> {
+    pub fn insert_terminal(&mut self, parent: NodeIndex, terminal: Terminal) -> NodeIndex {
         assert!(
             !self[parent].is_terminal(),
             "Can't insert node below terminal."
@@ -131,34 +137,54 @@ impl Tree {
         assert!(index <= self.n_terminals, "Index out of bounds.");
         let terminals = self.terminals().collect::<Vec<_>>();
         for terminal in terminals {
-            let pos = self[terminal].span().start;
+            let terminal = self[terminal]
+                .terminal_mut()
+                .expect("Unexpected NonTerminal");
+            let pos = terminal.idx();
             if pos >= index {
-                self[terminal].set_span(pos + 1)?;
+                terminal.set_idx(pos + 1);
             }
         }
         let terminal = self.graph.add_node(terminal.into());
         self.graph.add_edge(parent, terminal, Edge::default());
         self.reset_nt_spans();
         self.n_terminals += 1;
-        Ok(terminal)
+        terminal
     }
 
     /// Adds a Terminal to the end of the sentence.
     ///
     /// This method adds a terminal to the end of the sentence and attaches it to the
-    /// root node. The Span specified in `terminal` is overwritten with `n_terminals`.
+    /// root node.
     ///
     /// Returns `Err` if the root node is a Terminal.
-    pub fn push_terminal(&mut self, mut terminal: Terminal) -> Result<NodeIndex, Error> {
+    ///
+    /// ```
+    /// use lumberjack::Tree;
+    /// use lumberjack::io::PTBFormat;
+    ///
+    /// let mut tree = Tree::new("a", "A");
+    /// let root = tree.root();
+    /// let root = tree.insert_unary_above(root, "ROOT");
+    /// tree.push_terminal("b", "B").unwrap();
+    /// assert_eq!("(ROOT (A a) (B b))", PTBFormat::Simple.tree_to_string(&tree).unwrap());
+    /// ```
+    pub fn push_terminal(
+        &mut self,
+        form: impl Into<String>,
+        pos: impl Into<String>,
+    ) -> Result<NodeIndex, Error> {
         if self[self.root].is_terminal() {
             return Err(format_err!(
                 "Can't append terminal node if root is a terminal."
             ));
         }
-        terminal.set_idx(self.n_terminals);
+        let terminal = Terminal::new(form, pos, self.n_terminals);
         self.n_terminals += 1;
         let terminal = self.graph.add_node(terminal.into());
         self.graph.add_edge(self.root, terminal, Edge::default());
+        let root = self.root;
+        self[root].extend_span().unwrap();
         Ok(terminal)
     }
 
@@ -352,7 +378,7 @@ impl Tree {
 
     /// Returns whether the tree is projective.
     pub fn is_projective(&self) -> bool {
-        self.num_non_projective == 0
+        self.num_discontinuous == 0
     }
 
     /// Project indices of `NonTerminal`s onto `Terminal`s.
@@ -409,13 +435,27 @@ impl Tree {
 
 // (crate) private methods
 impl Tree {
+    pub(crate) fn new_from_parts(
+        graph: StableGraph<Node, Edge>,
+        n_terminals: usize,
+        root: NodeIndex,
+        num_non_projective: usize,
+    ) -> Self {
+        Tree {
+            graph,
+            n_terminals,
+            root,
+            num_discontinuous: num_non_projective,
+        }
+    }
+
     pub(crate) fn projectivity_change(&mut self, before: Continuity, after: Continuity) -> usize {
         match (before, after) {
-            (Continuity::Continuous, Continuity::Discontinuous) => self.num_non_projective += 1,
-            (Continuity::Discontinuous, Continuity::Continuous) => self.num_non_projective -= 1,
+            (Continuity::Continuous, Continuity::Discontinuous) => self.num_discontinuous += 1,
+            (Continuity::Discontinuous, Continuity::Continuous) => self.num_discontinuous -= 1,
             _ => (),
         };
-        self.num_non_projective
+        self.num_discontinuous
     }
 
     /// Get a mutable reference to the underlying `StableGraph`.
@@ -444,7 +484,7 @@ impl Tree {
 
         let node = self.graph.remove_node(nonterminal).unwrap();
         if node.span().skips().is_some() {
-            self.num_non_projective -= 1;
+            self.num_discontinuous -= 1;
         }
         Ok(node)
     }
@@ -466,19 +506,8 @@ impl Tree {
         Ok(self.graph.remove_node(terminal).unwrap())
     }
 
-    /// Set root of the tree.
-    ///
-    /// Panics if the new root index is invalid.
-    pub(crate) fn set_root(&mut self, new_root: NodeIndex) {
-        assert!(
-            self.graph.contains_node(new_root),
-            "New root node has to be present in the  graph."
-        );
-        self.root = new_root;
-    }
-
     pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
-        self.num_non_projective = num_non_projective
+        self.num_discontinuous = num_non_projective
     }
 
     /// Reset terminal spans to increasing by 1 at each step.
@@ -498,7 +527,7 @@ impl Tree {
     /// Resets nonterminal spans based on terminal spans.
     pub(crate) fn reset_nt_spans(&mut self) {
         let mut dfs = DfsPostOrder::new(&self.graph, self.root);
-        self.num_non_projective = 0;
+        self.num_discontinuous = 0;
         while let Some(node) = dfs.next(&self.graph) {
             if !self[node].is_terminal() {
                 let coverage = self
@@ -507,7 +536,7 @@ impl Tree {
                     .collect::<Vec<_>>();
                 let span = Span::from_vec(coverage).unwrap();
                 if span.skips().is_some() {
-                    self.num_non_projective += 1;
+                    self.num_discontinuous += 1;
                 }
                 self[node].nonterminal_mut().unwrap().set_span(span);
             }
@@ -547,7 +576,7 @@ impl Tree {
 }
 
 // recursively check if at each level the trees are identical.
-fn eq_helper(tree_1_idx: NodeIndex, tree_1: &Tree, tree_2_idx: NodeIndex, tree_2: &Tree) -> bool {
+fn subtree_eq(tree_1_idx: NodeIndex, tree_1: &Tree, tree_2_idx: NodeIndex, tree_2: &Tree) -> bool {
     let mut nodes1 = tree_1
         .children(tree_1_idx)
         .map(|(n, _)| n)
@@ -573,7 +602,7 @@ fn eq_helper(tree_1_idx: NodeIndex, tree_1: &Tree, tree_2_idx: NodeIndex, tree_2
             return false;
         }
 
-        if !eq_helper(node1, tree_1, node2, tree_2) {
+        if !subtree_eq(node1, tree_1, node2, tree_2) {
             return false;
         }
     }
@@ -590,7 +619,7 @@ impl PartialEq for Tree {
             return false;
         };
 
-        eq_helper(self.root(), self, other.root(), other)
+        subtree_eq(self.root(), self, other.root(), other)
     }
 }
 
@@ -668,6 +697,24 @@ mod tests {
     use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
 
     #[test]
+    fn construct_tree() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let from_ptb = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+
+        let mut tree = Tree::new("t1", "TERM1");
+        let root = tree.root();
+        tree.insert_unary_above(root, "ROOT");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        let root = tree.root();
+        tree.insert_unary_below(root, "FIRST").unwrap();
+        tree.push_terminal("t3", "TERM3").unwrap();
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        tree.insert_unary_above(t4, "SECOND");
+        tree.push_terminal("t5", "TERM5").unwrap();
+        assert_eq!(from_ptb, tree);
+    }
+
+    #[test]
     fn reset_spans() {
         let mut tree = some_tree();
         let nt_indices = tree.nonterminals().collect::<Vec<_>>();
@@ -691,32 +738,16 @@ mod tests {
 
     #[test]
     fn project_node_labels() {
-        let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 1));
-        let first = NonTerminal::new("FIRST", Span::from_vec(vec![0, 2]).unwrap());
-        let term1 = Terminal::new("t1", "TERM1", 0);
-        let term2 = Terminal::new("t2", "TERM1", 1);
-        let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("SECOND", 3);
-        let term4 = Terminal::new("t4", "TERM4", 4);
-        let term5 = Terminal::new("t5", "TERM5", 5);
-        let root_idx = g.add_node(Node::NonTerminal(root));
-        let first_idx = g.add_node(Node::NonTerminal(first));
-        let term1_idx = g.add_node(Node::Terminal(term1));
-        let term2_idx = g.add_node(Node::Terminal(term2));
-        g.add_edge(root_idx, first_idx, Edge::default());
-        g.add_edge(first_idx, term1_idx, Edge::default());
-        g.add_edge(root_idx, term2_idx, Edge::default());
-        let term3_idx = g.add_node(Node::Terminal(term3));
-        g.add_edge(first_idx, term3_idx, Edge::default());
-        let second_idx = g.add_node(Node::NonTerminal(second));
-        g.add_edge(root_idx, second_idx, Edge::default());
-        let term4_idx = g.add_node(Node::Terminal(term4));
-        g.add_edge(second_idx, term4_idx, Edge::default());
-        let term5_idx = g.add_node(Node::Terminal(term5));
-        g.add_edge(root_idx, term5_idx, Edge::default());
+        let mut tree = Tree::new("t1", "TERM1");
+        let t1 = tree.root();
+        tree.insert_unary_above(t1, "ROOT");
+        let first = tree.insert_unary_above(t1, "FIRST");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        tree.insert_terminal(first, Terminal::new("t3", "TERM", 2));
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        let second = tree.insert_unary_above(t4, "SECOND");
+        tree.insert_terminal(second, Terminal::new("t4", "TERM4", 4));
 
-        let tree = Tree::new(g, 5, root_idx, 0);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_tag_set(&LabelSet::Positive(tags));
@@ -726,32 +757,16 @@ mod tests {
 
     #[test]
     fn project_node_ids() {
-        let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 5));
-        let first = NonTerminal::new("L", Span::from_vec(vec![0, 2]).unwrap());
-        let term1 = Terminal::new("t1", "TERM1", 0);
-        let term2 = Terminal::new("t2", "TERM1", 1);
-        let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("L", Span::new(3, 4));
-        let term4 = Terminal::new("t4", "TERM4", 3);
-        let term5 = Terminal::new("t5", "TERM5", 4);
-        let root_idx = g.add_node(Node::NonTerminal(root));
-        let first_idx = g.add_node(Node::NonTerminal(first));
-        let term1_idx = g.add_node(Node::Terminal(term1));
-        let term2_idx = g.add_node(Node::Terminal(term2));
-        g.add_edge(root_idx, first_idx, Edge::default());
-        g.add_edge(first_idx, term1_idx, Edge::default());
-        g.add_edge(root_idx, term2_idx, Edge::default());
-        let term3_idx = g.add_node(Node::Terminal(term3));
-        g.add_edge(first_idx, term3_idx, Edge::default());
-        let second_idx = g.add_node(Node::NonTerminal(second));
-        g.add_edge(root_idx, second_idx, Edge::default());
-        let term4_idx = g.add_node(Node::Terminal(term4));
-        g.add_edge(second_idx, term4_idx, Edge::default());
-        let term5_idx = g.add_node(Node::Terminal(term5));
-        g.add_edge(root_idx, term5_idx, Edge::default());
+        let mut tree = Tree::new("t1", "TERM1");
+        let t1 = tree.root();
+        tree.insert_unary_above(t1, "ROOT");
+        let first = tree.insert_unary_above(t1, "L");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        tree.insert_terminal(first, Terminal::new("t3", "TERM", 2));
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        tree.insert_unary_above(t4, "L");
+        tree.push_terminal("t5", "TERM5").unwrap();
 
-        let tree = Tree::new(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("L".into());
         let indices = tree.project_ids(&LabelSet::Positive(tags));
@@ -798,13 +813,11 @@ mod tests {
     fn insert_terminal() {
         let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
         let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
-        tree.insert_terminal(NodeIndex::new(1), Terminal::new("t13", "TERM13", 2))
-            .unwrap();
+        tree.insert_terminal(NodeIndex::new(1), Terminal::new("t13", "TERM13", 2));
         assert_eq!("(ROOT (FIRST (TERM1 t1) (TERM2 t2) (TERM13 t13)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))",
                    PTBFormat::Simple.tree_to_string(&tree).unwrap());
         assert!(tree.is_projective());
-        tree.insert_terminal(NodeIndex::new(0), Terminal::new("non_proj", "NONPROJ", 1))
-            .unwrap();
+        tree.insert_terminal(NodeIndex::new(0), Terminal::new("non_proj", "NONPROJ", 1));
         assert!(!tree.is_projective());
     }
 
@@ -812,8 +825,7 @@ mod tests {
     fn push_terminal() {
         let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
         let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
-        let terminal = Terminal::new("pushed", "PUSH", 0);
-        let terminal = tree.push_terminal(terminal).unwrap();
+        let terminal = tree.push_terminal("pushed", "PUSH").unwrap();
         assert_eq!(
             tree[terminal],
             Node::from(Terminal::new("pushed", "PUSH", 5))
@@ -1021,7 +1033,7 @@ mod tests {
         let c_edge = graph.add_edge(root, c_term, Edge::default());
         graph.add_edge(a, a_term, Edge::default());
         let b_edge = graph.add_edge(a, b_term, Edge::default());
-        let non_proj = Tree::new(graph, 3, root, 1);
+        let non_proj = Tree::new_from_parts(graph, 3, root, 1);
         let mut tree = non_proj.clone();
 
         tree.reattach_node(a, c_edge).unwrap();
@@ -1055,7 +1067,7 @@ mod tests {
         assert!(tree.siblings(tree.root()).next().is_none());
         // NodeIndex(1) is Node::Inner("FIRST" ..)
         let siblings = tree
-            .siblings(NodeIndex::new(1))
+            .siblings(NodeIndex::new(3))
             .into_iter()
             .map(|(sibling, _)| match tree.graph()[sibling] {
                 Node::NonTerminal(ref nt) => nt.label().to_string(),
@@ -1094,7 +1106,7 @@ mod tests {
         g.add_edge(second_idx, term4_idx, Edge::default());
         g.add_edge(root_idx, first_idx, Edge::default());
         let some_tree = some_tree();
-        let mut other_tree = Tree::new(g.clone(), 5, root_idx, 0);
+        let mut other_tree = Tree::new_from_parts(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
         other_tree[term2_idx]
             .terminal_mut()
@@ -1102,41 +1114,26 @@ mod tests {
             .set_lemma(Some("some_lemma"));
         assert_ne!(some_tree, other_tree);
         g.remove_node(term2_idx);
-        let other_tree = Tree::new(g.clone(), 4, root_idx, 0);
+        let other_tree = Tree::new_from_parts(g.clone(), 4, root_idx, 0);
         assert_ne!(some_tree, other_tree);
         let new_t2_idx = g.add_node(Node::Terminal(term2));
         g.add_edge(first_idx, new_t2_idx, Edge::default());
-        let other_tree = Tree::new(g.clone(), 5, root_idx, 0);
+        let other_tree = Tree::new_from_parts(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
     }
 
     fn some_tree() -> Tree {
         //(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
-        let mut g = StableGraph::new();
-        let root = NonTerminal::new("ROOT", Span::new(0, 5));
-        let first = NonTerminal::new("FIRST", Span::new(0, 2));
-        let term1 = Terminal::new("t1", "TERM1", 0);
-        let term2 = Terminal::new("t2", "TERM2", 1);
-        let term3 = Terminal::new("t3", "TERM3", 2);
-        let second = NonTerminal::new("SECOND", Span::new(3, 4));
-        let term4 = Terminal::new("t4", "TERM4", 3);
-        let term5 = Terminal::new("t5", "TERM5", 4);
-        let root_idx = g.add_node(Node::NonTerminal(root));
-        let first_idx = g.add_node(Node::NonTerminal(first));
-        let term1_idx = g.add_node(Node::Terminal(term1));
-        let term2_idx = g.add_node(Node::Terminal(term2));
-        g.add_edge(root_idx, first_idx, Edge::default());
-        g.add_edge(first_idx, term1_idx, Edge::default());
-        g.add_edge(first_idx, term2_idx, Edge::default());
-        let term3_idx = g.add_node(Node::Terminal(term3));
-        g.add_edge(root_idx, term3_idx, Edge::default());
-        let second_idx = g.add_node(Node::NonTerminal(second));
-        g.add_edge(root_idx, second_idx, Edge::default());
-        let term4_idx = g.add_node(Node::Terminal(term4));
-        g.add_edge(second_idx, term4_idx, Edge::default());
-        let term5_idx = g.add_node(Node::Terminal(term5));
-        g.add_edge(root_idx, term5_idx, Edge::default());
-
-        Tree::new(g, 5, root_idx, 0)
+        let mut tree = Tree::new("t1", "TERM1");
+        let root = tree.root();
+        tree.insert_unary_above(root, "ROOT");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        let root = tree.root();
+        tree.insert_unary_below(root, "FIRST").unwrap();
+        tree.push_terminal("t3", "TERM3").unwrap();
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        tree.insert_unary_above(t4, "SECOND");
+        tree.push_terminal("t5", "TERM5").unwrap();
+        tree
     }
 }

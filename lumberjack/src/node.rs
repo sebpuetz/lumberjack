@@ -353,6 +353,11 @@ impl Terminal {
         &self.span
     }
 
+    /// Returns the Terminal's linear position in the sentence.
+    pub fn idx(&self) -> usize {
+        self.span.start
+    }
+
     /// Set this `Terminal`'s index.
     pub(crate) fn set_idx(&mut self, idx: usize) {
         self.span = idx.into()

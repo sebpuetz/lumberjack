@@ -301,7 +301,7 @@ impl Decode for Tree {
             }
         }
 
-        let mut tree = Tree::new(graph, n_terminals, root_idx, 0);
+        let mut tree = Tree::new_from_parts(graph, n_terminals, root_idx, 0);
         tree.reset_nt_spans();
         tree
     }

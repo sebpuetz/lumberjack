@@ -174,7 +174,12 @@ fn build_tree(pair: Pair<Rule>) -> Result<Tree, Error> {
                 for (edge, node) in edge_list {
                     graph.add_edge(root, node, edge);
                 }
-                return Ok(Tree::new(graph, n_terminals, root, num_non_projective));
+                return Ok(Tree::new_from_parts(
+                    graph,
+                    n_terminals,
+                    root,
+                    num_non_projective,
+                ));
             }
             _ => unreachable!(),
         }
@@ -349,7 +354,7 @@ mod tests {
         g.add_edge(root, punct, Edge::default());
         g.add_edge(nxorg, a, Edge::from(Some("HD")));
         g.add_edge(nx, s, Edge::from(Some("HD")));
-        assert_eq!(tree, Tree::new(g, 5, root, 0));
+        assert_eq!(tree, Tree::new_from_parts(g, 5, root, 0));
     }
 
     #[test]

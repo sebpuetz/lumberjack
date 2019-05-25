@@ -93,7 +93,7 @@ impl PTBFormat {
         let mut parsed_line = PTBParser::parse(Rule::tree, string)?;
         let (_, root, _) =
             self.parse_value(parsed_line.next().unwrap(), &mut graph, &mut n_terminals)?;
-        Ok(Tree::new(graph, n_terminals, root, 0))
+        Ok(Tree::new_from_parts(graph, n_terminals, root, 0))
     }
 
     fn format_sub_tree(&self, sentence: &Tree, position: NodeIndex, edge: Option<&str>) -> String {
@@ -431,7 +431,7 @@ mod tests {
         cmp_graph.add_edge(root, first, Edge::default());
         cmp_graph.add_edge(root, sec, Edge::from(Some("label")));
         cmp_graph.add_edge(root, term4, Edge::default());
-        let tree2 = Tree::new(cmp_graph, 4, NodeIndex::new(6), 0);
+        let tree2 = Tree::new_from_parts(cmp_graph, 4, NodeIndex::new(6), 0);
         let tree = PTBFormat::TueBa.string_to_tree(l).unwrap();
         assert_eq!(tree, tree2);
 

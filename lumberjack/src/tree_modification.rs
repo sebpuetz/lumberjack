@@ -203,9 +203,6 @@ impl TreeOps for Tree {
                         .map(|chain| format!("{}{}{}", chain, delim, label))
                         .unwrap_or_else(|| label);
                     features.insert("unary_chain", Some(chain));
-                    if node == self.root() {
-                        self.set_root(cur);
-                    }
                 } else {
                     cur = node;
                 }
@@ -407,7 +404,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, 1);
+        let tree = Tree::new_from_parts(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("L".into());
         let mut filtered_tree = tree.clone();
@@ -439,7 +436,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, 1);
+        let target = Tree::new_from_parts(g, 5, root_idx, 1);
         assert_eq!(target, filtered_tree);
 
         let mut tags = HashSet::new();
@@ -469,7 +466,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, 0);
+        let target = Tree::new_from_parts(g, 5, root_idx, 0);
         assert_eq!(target, filtered_tree);
     }
 
@@ -499,7 +496,7 @@ mod tests {
         g.add_edge(root_idx, term5_idx, Edge::default());
         let mut set = HashSet::new();
         set.insert("L".into());
-        let mut unk_tree = Tree::new(g, 5, root_idx, 1);
+        let mut unk_tree = Tree::new_from_parts(g, 5, root_idx, 1);
         unk_tree
             .insert_intermediate(&LabelSet::Positive(set), "UNK")
             .unwrap();
@@ -531,7 +528,7 @@ mod tests {
         let term5 = Terminal::new("t5", "TERM5", 4);
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(second_unk_idx, term5_idx, Edge::default());
-        let target = Tree::new(g, 5, root_idx, 1);
+        let target = Tree::new_from_parts(g, 5, root_idx, 1);
         assert_eq!(target, unk_tree);
     }
 
@@ -562,7 +559,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, 0);
+        let tree = Tree::new_from_parts(g, 5, root_idx, 0);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_nt_indices(&LabelSet::Positive(tags));
@@ -597,7 +594,7 @@ mod tests {
         let term5_idx = g.add_node(Node::Terminal(term5));
         g.add_edge(root_idx, term5_idx, Edge::default());
 
-        let tree = Tree::new(g, 5, root_idx, 1);
+        let tree = Tree::new_from_parts(g, 5, root_idx, 1);
         let mut tags = HashSet::new();
         tags.insert("FIRST".into());
         let indices = tree.project_nt_indices(&LabelSet::Positive(tags));
