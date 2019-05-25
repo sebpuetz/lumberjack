@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 use failure::Error;
-use petgraph::prelude::{Bfs, DfsPostOrder, Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
+use fixedbitset::FixedBitSet;
+use petgraph::prelude::{Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
+use petgraph::visit::{Bfs, Dfs, DfsPostOrder, VisitMap};
 
 use crate::util::LabelSet;
 use crate::{Edge, Node, Span};
@@ -95,17 +97,9 @@ impl Tree {
         }
     }
 
-    /// Get an iterator over `node`'s descendents.
-    pub fn descendent_terminals<'a>(
-        &'a self,
-        node: NodeIndex,
-    ) -> Box<Iterator<Item = NodeIndex> + 'a> {
-        if let Node::NonTerminal(nt) = &self[node] {
-            let terminals = self.terminals().collect::<Vec<_>>();
-            Box::new(nt.span().into_iter().map(move |idx| terminals[idx]))
-        } else {
-            Box::new(std::iter::empty::<NodeIndex<u32>>())
-        }
+    /// Get an iterator over `node`'s descendent.
+    pub fn descendent_terminals(&self, node: NodeIndex) -> TerminalDescendents<FixedBitSet> {
+        TerminalDescendents::new(self, node)
     }
 
     /// Get sibling-relation of two tree nodes.
@@ -343,6 +337,41 @@ impl IndexMut<NodeIndex> for Tree {
 impl IndexMut<EdgeIndex> for Tree {
     fn index_mut(&mut self, index: EdgeIndex) -> &mut Edge {
         &mut self.graph[index]
+    }
+}
+
+/// Iterator over terminal descendents of a node.
+///
+/// The terminals are returned in no particular order.
+pub struct TerminalDescendents<'a, VM> {
+    tree: &'a Tree,
+    dfs: Dfs<NodeIndex, VM>,
+}
+
+impl<'a> TerminalDescendents<'a, FixedBitSet> {
+    fn new(tree: &'a Tree, node: NodeIndex) -> Self {
+        TerminalDescendents {
+            tree,
+            dfs: Dfs::new(tree.graph(), node),
+        }
+    }
+}
+
+impl<'a, VM> Iterator for TerminalDescendents<'a, VM>
+where
+    VM: VisitMap<NodeIndex>,
+{
+    type Item = NodeIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(node) = self.dfs.next(self.tree.graph()) {
+            if self.tree[node].is_terminal() {
+                return Some(node);
+            } else {
+                continue;
+            }
+        }
+        None
     }
 }
 
