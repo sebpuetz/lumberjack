@@ -332,7 +332,10 @@ impl PartialEq<Terminal> for Terminal {
 }
 
 impl Terminal {
-    pub(crate) fn new(form: impl Into<String>, pos: impl Into<String>, idx: usize) -> Self {
+    /// Construct new Terminal.
+    ///
+    /// Constructs a new Terminal with the given form and part-of-speech tag at the specified index.
+    pub fn new(form: impl Into<String>, pos: impl Into<String>, idx: usize) -> Self {
         Terminal {
             form: form.into(),
             pos: pos.into(),
@@ -348,6 +351,11 @@ impl Terminal {
     /// the `Terminal` in the sentence.
     pub fn span(&self) -> &Span {
         &self.span
+    }
+
+    /// Set this `Terminal`'s index.
+    pub(crate) fn set_idx(&mut self, idx: usize) {
+        self.span = idx.into()
     }
 
     /// Return the `Terminal`s form.

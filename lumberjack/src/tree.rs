@@ -8,7 +8,7 @@ use petgraph::prelude::{Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
 use petgraph::visit::{Bfs, Dfs, DfsPostOrder, VisitMap};
 
 use crate::util::{Climber, LabelSet};
-use crate::{Continuity, Edge, Node, NonTerminal, Span};
+use crate::{Continuity, Edge, Node, NonTerminal, Span, Terminal};
 
 /// `Tree`
 ///
@@ -80,6 +80,86 @@ impl Tree {
         self.graph
             .edges_directed(node, Direction::Outgoing)
             .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
+    }
+
+    /// Move a Terminal to a different position in the sentence.
+    ///
+    /// This method does not reattach the Terminal and can change the Tree's projectivity.
+    ///
+    /// Panics if index is out of bounds or the index of a NonTerminal is passed as argument.
+    pub fn move_terminal(&mut self, terminal: NodeIndex, index: usize) {
+        if self[terminal].span().start == index {
+            return;
+        }
+        assert!(self[terminal].is_terminal(), "Can't move NonTerminals.");
+        assert!(index < self.n_terminals, "Index out of bounds.");
+        let old_pos = self[terminal].span().start;
+        let terminals = self
+            .terminals()
+            .filter(|t| *t != terminal)
+            .collect::<Vec<_>>();
+        for terminal in terminals {
+            let pos = self[terminal].span().start;
+            if old_pos <= pos && pos <= index {
+                // shift to the right
+                self[terminal].set_span(pos - 1).unwrap();
+            } else if index <= pos && pos <= old_pos {
+                // shift to the left
+                self[terminal].set_span(pos + 1).unwrap();
+            }
+        }
+        self[terminal].set_span(index).unwrap();
+        self.reset_nt_spans();
+    }
+
+    /// Insert a new terminal node.
+    ///
+    /// Inserts a new terminal node with the given parent at the index specified in the Terminal's
+    /// Span.
+    ///
+    /// Panics if the specified parent node is a Terminal or if the index is out of bounds.
+    pub fn insert_terminal(
+        &mut self,
+        parent: NodeIndex,
+        terminal: Terminal,
+    ) -> Result<NodeIndex, Error> {
+        assert!(
+            !self[parent].is_terminal(),
+            "Can't insert node below terminal."
+        );
+        let index = terminal.span().start;
+        assert!(index <= self.n_terminals, "Index out of bounds.");
+        let terminals = self.terminals().collect::<Vec<_>>();
+        for terminal in terminals {
+            let pos = self[terminal].span().start;
+            if pos >= index {
+                self[terminal].set_span(pos + 1)?;
+            }
+        }
+        let terminal = self.graph.add_node(terminal.into());
+        self.graph.add_edge(parent, terminal, Edge::default());
+        self.reset_nt_spans();
+        self.n_terminals += 1;
+        Ok(terminal)
+    }
+
+    /// Adds a Terminal to the end of the sentence.
+    ///
+    /// This method adds a terminal to the end of the sentence and attaches it to the
+    /// root node. The Span specified in `terminal` is overwritten with `n_terminals`.
+    ///
+    /// Returns `Err` if the root node is a Terminal.
+    pub fn push_terminal(&mut self, mut terminal: Terminal) -> Result<NodeIndex, Error> {
+        if self[self.root].is_terminal() {
+            return Err(format_err!(
+                "Can't append terminal node if root is a terminal."
+            ));
+        }
+        terminal.set_idx(self.n_terminals);
+        self.n_terminals += 1;
+        let terminal = self.graph.add_node(terminal.into());
+        self.graph.add_edge(self.root, terminal, Edge::default());
+        Ok(terminal)
     }
 
     /// Insert a new unary node above a node.
@@ -712,6 +792,60 @@ mod tests {
         );
         assert_eq!("(NewRoot (ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5)))",
                    PTBFormat::Simple.tree_to_string(&tree).unwrap());
+    }
+
+    #[test]
+    fn insert_terminal() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+        tree.insert_terminal(NodeIndex::new(1), Terminal::new("t13", "TERM13", 2))
+            .unwrap();
+        assert_eq!("(ROOT (FIRST (TERM1 t1) (TERM2 t2) (TERM13 t13)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))",
+                   PTBFormat::Simple.tree_to_string(&tree).unwrap());
+        assert!(tree.is_projective());
+        tree.insert_terminal(NodeIndex::new(0), Terminal::new("non_proj", "NONPROJ", 1))
+            .unwrap();
+        assert!(!tree.is_projective());
+    }
+
+    #[test]
+    fn push_terminal() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+        let terminal = Terminal::new("pushed", "PUSH", 0);
+        let terminal = tree.push_terminal(terminal).unwrap();
+        assert_eq!(
+            tree[terminal],
+            Node::from(Terminal::new("pushed", "PUSH", 5))
+        );
+        assert_eq!("(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5) (PUSH pushed))",
+                   PTBFormat::Simple.tree_to_string(&tree).unwrap());
+    }
+
+    #[test]
+    fn move_terminal() {
+        let ptb = "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))";
+        let mut tree = PTBFormat::Simple.string_to_tree(ptb).unwrap();
+        tree.move_terminal(NodeIndex::new(6), 4);
+        assert_eq!(
+            "(ROOT (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (TERM5 t5) (SECOND (TERM4 t4)))",
+            PTBFormat::Simple.tree_to_string(&tree).unwrap()
+        );
+        tree.move_terminal(NodeIndex::new(6), 3);
+        assert_eq!(ptb, PTBFormat::Simple.tree_to_string(&tree).unwrap());
+        tree.move_terminal(NodeIndex::new(6), 0);
+        assert_eq!(
+            "(ROOT (SECOND (TERM4 t4)) (FIRST (TERM1 t1) (TERM2 t2)) (TERM3 t3) (TERM5 t5))",
+            PTBFormat::Simple.tree_to_string(&tree).unwrap()
+        );
+        let root = tree.root();
+        let (_, edge) = tree.parent(NodeIndex::new(2)).unwrap();
+        tree.reattach_node(root, edge).unwrap();
+        tree.move_terminal(NodeIndex::new(2), 0);
+        assert_eq!(
+            "(ROOT (TERM1 t1) (SECOND (TERM4 t4)) (FIRST (TERM2 t2)) (TERM3 t3) (TERM5 t5))",
+            PTBFormat::Simple.tree_to_string(&tree).unwrap()
+        );
     }
 
     #[test]
