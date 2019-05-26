@@ -282,7 +282,7 @@ impl Tree {
     /// Returns `Ok(old_edge)` otherwise.
     ///
     /// Panics if any of the indices is not present in the tree.
-    pub fn reattach_node(&mut self, new_parent: NodeIndex, edge: EdgeIndex) -> Result<Edge, Error> {
+    pub fn reattach_node(&mut self, new_parent: NodeIndex, edge: EdgeIndex) -> Result<(EdgeIndex, Edge), Error> {
         assert!(
             self.graph.contains_node(new_parent),
             "Reattachment point has to be in the tree."
@@ -319,7 +319,7 @@ impl Tree {
             }
         }
         let edge = self.graph.remove_edge(edge).unwrap();
-        self.graph.add_edge(new_parent, child, Edge::default());
+        let edge_idx = self.graph.add_edge(new_parent, child, Edge::default());
         let child_span = self[child].span().to_owned();
 
         let mut climber = Climber::new(child, self);
@@ -338,7 +338,7 @@ impl Tree {
             };
         }
 
-        Ok(edge)
+        Ok((edge_idx, edge))
     }
 
     /// Get an iterator over `node`'s siblings.
@@ -504,10 +504,6 @@ impl Tree {
         self.reset_nt_spans();
         self.n_terminals -= 1;
         Ok(self.graph.remove_node(terminal).unwrap())
-    }
-
-    pub(crate) fn set_projectivity(&mut self, num_non_projective: usize) {
-        self.num_discontinuous = num_non_projective
     }
 
     /// Reset terminal spans to increasing by 1 at each step.
@@ -939,7 +935,7 @@ mod tests {
         let mut tree = some_tree();
         let terminals = tree.terminals().collect::<Vec<_>>();
         let (parent, edge) = tree.parent(terminals[0]).unwrap();
-        assert_eq!(Edge::default(), tree.reattach_node(parent, edge).unwrap());
+        assert_eq!(Edge::default(), tree.reattach_node(parent, edge).unwrap().1);
         assert_eq!(tree, some_tree());
     }
 
@@ -950,7 +946,7 @@ mod tests {
         let terminals = tree.terminals().collect::<Vec<_>>();
         let (_, edge) = tree.parent(terminals[0]).unwrap();
         let root = tree.root();
-        assert_eq!(Edge::default(), tree.reattach_node(root, edge).unwrap());
+        assert_eq!(Edge::default(), tree.reattach_node(root, edge).unwrap().1);
         assert_eq!(
             PTBFormat::Simple.tree_to_string(&tree).unwrap(),
             "(ROOT (TERM1 t1) (FIRST (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
@@ -1014,7 +1010,7 @@ mod tests {
             .next()
             .unwrap();
         let (_, edge) = tree.parent(nt).unwrap();
-        assert_eq!(Edge::default(), tree.reattach_node(target, edge).unwrap());
+        assert_eq!(Edge::default(), tree.reattach_node(target, edge).unwrap().1);
         assert_eq!(
             PTBFormat::Simple.tree_to_string(&tree).unwrap(),
             "(ROOT (FIRST (TERM1 t1) (TERM2 t2) (MOVE (TERM3 t3))) (SECOND (TERM4 t4)) (TERM5 t5))"

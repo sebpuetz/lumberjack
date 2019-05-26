@@ -2,7 +2,7 @@ use failure::Error;
 use petgraph::prelude::DfsPostOrder;
 
 use crate::util::{Climber, LabelSet};
-use crate::{Node, NonTerminal, Span, Tree};
+use crate::{Node, NonTerminal, Tree};
 
 /// Trait to annotate Part of Speech tags.
 ///
@@ -236,73 +236,42 @@ pub trait Projectivize {
 
 impl Projectivize for Tree {
     fn projectivize(&mut self) {
-        // TODO use n_non_projective counter to stop early
-        // TODO sort terminals by idx
         if !self.is_projective() {
-            let terminals = self.terminals().collect::<Vec<_>>();;
+            let mut terminals = self.terminals().collect::<Vec<_>>();
+            // terminals need to be sorted, otherwise indexing through spans can be incorrect
+            self.sort_indices(&mut terminals);
+
             let mut dfs = DfsPostOrder::new(self.graph(), self.root());
-            let mut log = vec![None; terminals.len()];
-
-            while let Some(attachment_point_candidate) = dfs.next(self.graph()) {
-                let span = self[attachment_point_candidate].span();
-                if span.skips().is_none() {
-                    continue;
-                }
-                let span = span.to_owned();
-
-                let mut skips = span.skips().unwrap().to_owned();
-                while let Some(&skipped) = skips.iter().next() {
-                    // check if terminal at idx skipped has already been reattached. We're
-                    // doing a postorder traversal, generally if something has been
-                    // reattached it ends up in the correct place, unless there are
-                    // multiple non-terminals covering the span. In that case, the correct
-                    // attachment is that non-terminal starting at the higher index.
-                    if let Some(claimed) = log[skipped] {
-                        if claimed >= span.start {
-                            // remove skipped idx so the loop can terminate
-                            skips.remove(&skipped);
-                            continue;
-                        }
-                    }
-
+            while let Some(attachment_point) = dfs.next(self.graph()) {
+                // as long as the node at attachment_point is discontinuous, skipped indices will
+                // be returned.
+                while let Some(&skipped) = self[attachment_point]
+                    .span()
+                    .skips()
+                    .and_then(|s| s.iter().next())
+                {
+                    // start climbing at skipped index
                     let mut climber = Climber::new(terminals[skipped], self);
-
-                    // cheap clone since terminal span is continuous (actually copy)
-                    let mut reattach_span = self[terminals[skipped]].span().clone();
-                    // keep track of which node is used to reattach non-projective material
-                    let mut attachment_handle = terminals[skipped];
-
-                    'a: while let Some(attachment_handle_candidate) = climber.next(&self) {
-                        // spans being eq implies unary chain, keep higher node as handle
-                        // for reattachment
-                        if self[attachment_handle_candidate].span() != &reattach_span {
-                            for covered in self[attachment_handle_candidate].span() {
-                                if span.contains(covered) {
-                                    for covered in self[attachment_handle].span() {
-                                        skips.remove(&covered);
-                                        log[covered] = Some(span.start);
-                                    }
-                                    let rm_edge = self.parent(attachment_handle).unwrap().1;
-                                    let edge = self.graph_mut().remove_edge(rm_edge).unwrap();
-                                    self.graph_mut().update_edge(
-                                        attachment_point_candidate,
-                                        attachment_handle,
-                                        edge,
-                                    );
-                                    break 'a;
-                                }
-                            }
-                            reattach_span = self[attachment_handle_candidate].span().clone();
+                    while let Some((handle_parent, handle_edge)) = climber.next_with_edge(&self) {
+                        // if the parent node of the handle covers the span of the attachment point,
+                        // we are higher in the tree than the target node. This means, the edge
+                        // below is introducing the nonprojective edge.
+                        if self[handle_parent]
+                            .span()
+                            .covers_span(self[attachment_point].span())
+                        {
+                            let (new_edge, edge) =
+                                self.reattach_node(attachment_point, handle_edge).unwrap();
+                            self[new_edge] = edge;
+                            break;
                         }
-                        attachment_handle = attachment_handle_candidate;
                     }
                 }
-                self[attachment_point_candidate]
-                    .nonterminal_mut()
-                    .unwrap()
-                    .set_span(Span::new(span.start, span.end));
+                // return if all spans have been fixed
+                if self.is_projective() {
+                    return;
+                }
             }
-            self.set_projectivity(0);
         }
     }
 }
