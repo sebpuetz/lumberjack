@@ -281,7 +281,6 @@ fn build<'a, 'b>() -> App<'a, 'b> {
                 .long("parent")
                 .takes_value(true)
                 .value_name("FEATURE_NAME")
-                .default_value("parent")
                 .help("Annotate parent tags of terminals as feature."),
         )
         .arg(
