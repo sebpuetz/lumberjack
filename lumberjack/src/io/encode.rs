@@ -16,7 +16,7 @@ use failure::Error;
 
 use crate::tree::Tree;
 use crate::tree_modification::TreeOps;
-use crate::util::{Climber, LabelSet};
+use crate::util::Climber;
 use crate::{Edge, Node, NonTerminal, Terminal};
 use petgraph::prelude::{NodeIndex, StableGraph};
 use petgraph::Direction;
@@ -307,15 +307,14 @@ impl Decode for Tree {
     }
 
     fn remove_dummy_nodes(&mut self) -> Result<(), Error> {
-        self.filter_nonterminals(&LabelSet::Negative(
-            vec!["DUMMY".to_string()].into_iter().collect(),
-        ))?;
-        if self[self.root()]
+        self.filter_nonterminals(|tree, nt| tree[nt].label() != EMPTY_NODE)?;
+        let root = self.root();
+        if self[root]
             .nonterminal()
             .map(|nt| nt.label() == "DUMMY")
             .unwrap_or(false)
+            && self.children(root).count() == 1
         {
-            let root = self.root();
             self.remove_node(root)?;
         }
         Ok(())
@@ -633,13 +632,14 @@ impl Deref for RelativeEncoding {
 
 #[cfg(test)]
 mod test {
+    use std::convert::TryFrom;
+
     use super::{AbsoluteEncoding, Decode, RelativeEncoding};
 
     use crate::io::encode::{AbsoluteAncestor, ConversionResult, Encode, RelativeAncestor};
     use crate::io::PTBFormat;
-    use crate::tree_modification::TreeOps;
+    use crate::tree_modification::UnaryChains;
     use crate::Tree;
-    use std::convert::TryFrom;
 
     #[test]
     fn test_try_from_str() {

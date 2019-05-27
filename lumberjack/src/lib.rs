@@ -23,6 +23,6 @@ mod span;
 pub use span::{Continuity, Span};
 
 mod tree_modification;
-pub use tree_modification::{AnnotatePOS, Projectivize, TreeOps};
+pub use tree_modification::{AnnotatePOS, Projectivize, TreeOps, UnaryChains};
 
 pub mod util;

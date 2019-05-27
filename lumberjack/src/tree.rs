@@ -5,9 +5,9 @@ use std::ops::{Index, IndexMut};
 use failure::Error;
 use fixedbitset::FixedBitSet;
 use petgraph::prelude::{Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
-use petgraph::visit::{Bfs, Dfs, DfsPostOrder, VisitMap};
+use petgraph::visit::{Dfs, DfsPostOrder, VisitMap};
 
-use crate::util::{Climber, LabelSet};
+use crate::util::Climber;
 use crate::{Continuity, Edge, Node, NonTerminal, Span, Terminal};
 
 /// `Tree`
@@ -282,7 +282,11 @@ impl Tree {
     /// Returns `Ok(old_edge)` otherwise.
     ///
     /// Panics if any of the indices is not present in the tree.
-    pub fn reattach_node(&mut self, new_parent: NodeIndex, edge: EdgeIndex) -> Result<(EdgeIndex, Edge), Error> {
+    pub fn reattach_node(
+        &mut self,
+        new_parent: NodeIndex,
+        edge: EdgeIndex,
+    ) -> Result<(EdgeIndex, Edge), Error> {
         assert!(
             self.graph.contains_node(new_parent),
             "Reattachment point has to be in the tree."
@@ -381,55 +385,159 @@ impl Tree {
         self.num_discontinuous == 0
     }
 
-    /// Project indices of `NonTerminal`s onto `Terminal`s.
+    /// Project indices of NonTerminals onto Terminals.
     ///
-    /// This method projects the `NodeIndex` of `NonTerminal`s with a label in
-    /// `tag_set` onto the terminal nodes. The hierarchically closest node's `NodeIndex`
-    /// will be assigned to each terminal.
+    /// Projects the `NodeIndex` of `NonTerminal`s matched by `match_fn` into a vector of length
+    /// `n_terminals`. The method climbs the tree starting at each terminal and applies the closure
+    /// at each step. If the closure returns `true`, the index of the currently considered
+    /// `NonTerminal` is assigned to the corresponding slot in the vector.
+    ///
+    /// Contrary to the other projection method, this method defaults to assigning the root node's
+    /// index if no other `NonTerminal` was matched.
     ///
     /// Returns a `Vec<NodeIndex>`.
-    pub fn project_nt_indices(&self, tag_set: &LabelSet) -> Vec<NodeIndex> {
-        let mut bfs = Bfs::new(&self.graph, self.root);
+    pub fn project_nt_indices<F>(&self, match_fn: F) -> Vec<NodeIndex>
+    where
+        F: Fn(&Tree, NodeIndex) -> bool,
+    {
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
         let mut indices = vec![self.root; self.n_terminals];
-        while let Some(node) = bfs.next(&self.graph) {
-            if let Some(inner) = self.graph[node].nonterminal() {
-                if tag_set.matches(inner.label()) {
-                    for id in self.graph[node].span() {
-                        indices[id] = node;
-                    }
+        for terminal in terminals {
+            let mut climber = Climber::new(terminal, self);
+            while let Some(parent) = climber.next(self) {
+                if match_fn(self, parent) {
+                    indices[self[terminal].span().start] = parent;
+                    break;
                 }
             }
         }
         indices
     }
 
-    /// Project labels of `NonTerminal`s onto `Terminal`s.
+    /// Apply closure at each NonTerminal while climbing up the tree.
     ///
-    /// This method projects the label for each node in `tag_set` onto the terminal nodes.
-    /// The hierarchically closest node's label will be assigned to each terminal.
-    pub fn project_tag_set(&self, tag_set: &LabelSet) -> Vec<&str> {
-        let indices = self.project_nt_indices(tag_set);
-        indices
-            .into_iter()
-            .map(|nt_idx| {
-                // safe to unwrap, we get the IDs from project_ids()
-                // which checks if nt_idx is Node::Inner
-                self.graph[nt_idx].nonterminal().unwrap().label()
-            })
-            .collect::<Vec<_>>()
+    /// Climbs up the tree starting at each terminal and applies the closure at each step.
+    /// If the closure returns `true`, climbing is stopped and the method advances to the
+    /// next terminal.
+    ///
+    /// Order of terminals does not necessarily correspond to linear order in the sentence.
+    ///
+    /// The closure takes the Tree, the current NonTerminal's index and the current Terminal's
+    /// index as arguments. The Tree structure can also be mutated in this method but it won't
+    /// be reflected in the path if the mutation happens just above or below the current node.
+    ///
+    /// E.g.
+    /// ```
+    /// use lumberjack::Tree;
+    ///
+    /// /// Remove all terminals' ancestors starting with `"A"`.
+    /// ///
+    /// /// Terminates upon finding the first ancestor starting with `"B"`.
+    /// fn climb_map(tree: &mut Tree) {
+    ///     tree.map_climber_path(|tree, ancestor_idx, terminal_idx| {
+    ///         if tree[ancestor_idx].label().starts_with("A") {
+    ///             tree.remove_node(ancestor_idx).unwrap();
+    ///         } else if tree[ancestor_idx].label().starts_with("B") {
+    ///             let label = tree[ancestor_idx].label().to_owned();
+    ///             tree[terminal_idx]
+    ///                 .features_mut()
+    ///                 .insert(
+    ///                     "b_ancestor",
+    ///                     Some(label),
+    ///                 );
+    ///             return true
+    ///         }
+    ///         false
+    ///     })
+    /// }
+    /// ```
+    pub fn map_climber_path<F>(&mut self, mut match_fn: F)
+    where
+        F: FnMut(&mut Tree, NodeIndex, NodeIndex) -> bool,
+    {
+        let terminals = self.terminals().collect::<Vec<_>>();
+        for terminal in terminals {
+            let mut climber = Climber::new(terminal, self);
+            while let Some(parent) = climber.next(self) {
+                if match_fn(self, parent, terminal) {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Project labels of NonTerminals onto Terminals.
+    ///
+    /// Labels will be annotated under `feature_name` in each terminal's `Features`.
+    ///
+    /// The method starts climbing the tree from each terminal and will stop climbing as soon as
+    /// the `match_fn` returns `true`. If it never returns `true` *no* feature will be annotated.
+    ///
+    /// E.g.
+    /// ```
+    /// use lumberjack::Tree;
+    ///
+    /// /// Annotate ancestor tags of the closest ancestor starting with `"A"` on terminals.
+    /// fn project_tags(tree: &mut Tree) {
+    ///     tree.project_tag_set("tag", |tree, ancestor_nt| {
+    ///         tree[ancestor_nt].label().starts_with("A")
+    ///     })
+    /// }
+    /// ```
+    pub fn project_tag_set<F>(&mut self, feature_name: &str, match_fn: F)
+    where
+        F: Fn(&Tree, NodeIndex) -> bool,
+    {
+        self.map_climber_path(|tree, nt, t| {
+            if match_fn(tree, nt) {
+                let label = tree[nt].label().to_owned();
+                tree[t].features_mut().insert(feature_name, Some(label));
+                true
+            } else {
+                false
+            }
+        });
     }
 
     /// Project unique IDs for nodes with label in `tag_set` onto terminals.
-    pub fn project_ids(&self, tag_set: &LabelSet) -> Vec<usize> {
-        let indices = self.project_nt_indices(tag_set);
-        let mut ids = vec![0; self.n_terminals];
+    ///
+    /// IDs will be annotated under `feature_name` in each terminal's `Features`.
+    ///
+    /// The method starts climbing the tree from each terminal and will stop climbing as soon as
+    /// the `match_fn` returns `true`. If it never returns `true` *no* feature will be annotated.
+    ///
+    /// E.g.
+    /// ```
+    /// use lumberjack::Tree;
+    ///
+    /// /// Add feature `"id"` with a unique identifiers on terminals.
+    /// ///
+    /// /// Adds features with unique ID for the hierarchically closest NonTerminal starting with
+    /// /// `"A"` on the Terminal nodes.
+    /// fn project_unique_ids(tree: &mut Tree) {
+    ///     tree.project_ids("id", |tree, nonterminal| {
+    ///         tree[nonterminal].label().starts_with("A")
+    ///     });
+    /// }
+    /// ```
+    pub fn project_ids<F>(&mut self, feature_name: &str, match_fn: F)
+    where
+        F: Fn(&Tree, NodeIndex) -> bool,
+    {
         let mut mapping = HashMap::new();
-        for (term_id, idx) in indices.into_iter().enumerate() {
-            let n = mapping.len();
-            let id = *mapping.entry(idx).or_insert(n);
-            ids[term_id] = id;
-        }
-        ids
+        self.map_climber_path(|tree, nt, t| {
+            if match_fn(tree, nt) {
+                let n = mapping.len();
+                let id = *mapping.entry(nt).or_insert(n);
+                tree[t]
+                    .features_mut()
+                    .insert(feature_name, Some(id.to_string()));
+                true
+            } else {
+                false
+            }
+        });
     }
 }
 
@@ -456,11 +564,6 @@ impl Tree {
             _ => (),
         };
         self.num_discontinuous
-    }
-
-    /// Get a mutable reference to the underlying `StableGraph`.
-    pub(crate) fn graph_mut(&mut self) -> &mut StableGraph<Node, Edge> {
-        &mut self.graph
     }
 
     /// Remove nonterminal node from the graph.
@@ -684,12 +787,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use petgraph::prelude::{NodeIndex, StableGraph};
 
     use crate::io::PTBFormat;
-    use crate::util::LabelSet;
     use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
 
     #[test]
@@ -744,10 +844,54 @@ mod tests {
         let second = tree.insert_unary_above(t4, "SECOND");
         tree.insert_terminal(second, Terminal::new("t4", "TERM4", 4));
 
-        let mut tags = HashSet::new();
-        tags.insert("FIRST".into());
-        let indices = tree.project_tag_set(&LabelSet::Positive(tags));
-        let target = vec!["FIRST", "ROOT", "FIRST", "ROOT", "ROOT"];
+        tree.project_tag_set("proj", |tree, nt| {
+            tree[nt].label() == "FIRST" || nt == tree.root()
+        });
+        let features = tree
+            .terminals()
+            .map(|terminal| tree[terminal].features().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let target = vec![
+            "proj:FIRST",
+            "proj:ROOT",
+            "proj:FIRST",
+            "proj:ROOT",
+            "proj:ROOT",
+        ];
+        assert_eq!(features, target)
+    }
+
+    #[test]
+    fn project_node_indices_nonprojective() {
+        let mut tree = Tree::new("t1", "TERM1");
+        let t1 = tree.root();
+        let root_idx = tree.insert_unary_above(t1, "ROOT");
+        let first_idx = tree.insert_unary_above(t1, "FIRST");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        tree.insert_terminal(first_idx, Terminal::new("t3", "TERM3", 2));
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        tree.insert_unary_above(t4, "SECOND");
+        tree.push_terminal("t5", "TERM5").unwrap();
+        let indices = tree.project_nt_indices(|tree, nt| tree[nt].label() == "FIRST");
+        let target = vec![first_idx, root_idx, first_idx, root_idx, root_idx];
+        assert_eq!(indices, target)
+    }
+
+    #[test]
+    fn project_node_indices() {
+        let mut tree = Tree::new("t1", "TERM1");
+        let t1 = tree.root();
+        let root_idx = tree.insert_unary_above(t1, "ROOT");
+        tree.push_terminal("t2", "TERM2").unwrap();
+        let root = tree.root();
+        let first_idx = tree.insert_unary_below(root, "FIRST").unwrap();
+        tree.push_terminal("t3", "TERM3").unwrap();
+        let t4 = tree.push_terminal("t4", "TERM4").unwrap();
+        tree.insert_unary_above(t4, "SECOND");
+        tree.push_terminal("t5", "TERM5").unwrap();
+
+        let indices = tree.project_nt_indices(|tree, nt| tree[nt].label() == "FIRST");
+        let target = vec![first_idx, first_idx, root_idx, root_idx, root_idx];
         assert_eq!(indices, target)
     }
 
@@ -763,12 +907,16 @@ mod tests {
         tree.insert_unary_above(t4, "L");
         tree.push_terminal("t5", "TERM5").unwrap();
 
-        let mut tags = HashSet::new();
-        tags.insert("L".into());
-        let indices = tree.project_ids(&LabelSet::Positive(tags));
+        tree.project_ids("id", |tree, nt| {
+            tree[nt].label() == "L" || tree.root() == nt
+        });
+        let features = tree
+            .terminals()
+            .map(|terminal| tree[terminal].features().unwrap().to_string())
+            .collect::<Vec<_>>();
         // 0 is first "L", 1 is ROOT and 2 is second "L"
-        let target = vec![0, 1, 0, 2, 1];
-        assert_eq!(indices, target)
+        let target = vec!["id:0", "id:1", "id:0", "id:2", "id:1"];
+        assert_eq!(features, target)
     }
 
     #[test]

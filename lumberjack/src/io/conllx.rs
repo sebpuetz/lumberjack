@@ -7,8 +7,7 @@ use failure::Error;
 
 use crate::io::encode::{AbsoluteAncestor, ConversionResult, RelativeAncestor};
 use crate::io::{AbsoluteEncoding, Decode, RelativeEncoding};
-use crate::tree_modification::TreeOps;
-use crate::{Terminal, Tree, WriteTree};
+use crate::{Terminal, Tree, UnaryChains, WriteTree};
 use std::io::Write;
 
 impl<W> WriteTree for Writer<W>

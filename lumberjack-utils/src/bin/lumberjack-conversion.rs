@@ -13,7 +13,7 @@ use lumberjack::io::{
     Decode, Encode, PTBFormat, PTBLineFormat, PTBWriter, TryFromConllx, WriteTree,
 };
 use lumberjack::util::LabelSet;
-use lumberjack::{NegraReader, PTBReader, Projectivize, Tree, TreeOps};
+use lumberjack::{NegraReader, PTBReader, Projectivize, Tree, TreeOps, UnaryChains};
 
 fn main() {
     let app = build();
@@ -33,21 +33,16 @@ fn main() {
     let output = Output::from(out_path);
     let writer = output.write().or_exit("Can't open output writer.", 1);
 
-    let parent_feature = if matches.is_present(PARENT) {
-        Some(
-            matches
-                .value_of(PARENT)
-                .map_or("parent".to_string(), ToOwned::to_owned),
-        )
-    } else {
-        None
-    };
+    let parent_feature = matches.value_of(PARENT);
+    let reattach_label = matches.value_of(REATTACH);
 
     let remove_dummies = matches.is_present(REMOVE_DUMMIES);
     let projectivize = matches.is_present(PROJECTIVIZE);
     let filter_set = matches.value_of(FILTER_SET).map(get_set_from_file);
+    let id_set = matches.value_of(ID_SET).map(get_set_from_file);
+    let id_feature_name = matches.value_of(ID_FEATURE_NAME).unwrap();
     let insertion_set = matches.value_of(INSERTION_SET).map(get_set_from_file);
-    let insertion_label = matches.value_of(INSERTION_LABEL).unwrap_or_else(|| "UNK");
+    let insertion_label = matches.value_of(INSERTION_LABEL).unwrap();
 
     let mut writer = get_writer(out_formatter, writer);
 
@@ -62,13 +57,31 @@ fn main() {
                 .or_exit("Can't remove dummy nopdes.", 1);
         }
 
+        if let Some(label) = reattach_label {
+            let root = tree.root();
+            tree.reattach_terminals(root, |tree, nt| tree[nt].label().starts_with(label))
+        }
+
+        if let Some(id_set) = id_set.as_ref() {
+            tree.project_ids(id_feature_name, |tree, nt| {
+                tree.root() == nt || id_set.matches(tree[nt].label())
+            })
+        }
+
         if let Some(filter_set) = filter_set.as_ref() {
-            tree.filter_nonterminals(filter_set).unwrap();
+            tree.filter_nonterminals(|tree, nt| filter_set.matches(tree[nt].label()))
+                .or_exit("Can't filter nodes.", 1);
         }
 
         if let Some(insertion_set) = insertion_set.as_ref() {
-            tree.insert_intermediate(insertion_set, insertion_label)
-                .or_exit("Can't insert nodes.", 1);
+            tree.insert_intermediate(|tree, nt| {
+                if !insertion_set.matches(tree[nt].label()) {
+                    Some(insertion_label.into())
+                } else {
+                    None
+                }
+            })
+            .or_exit("Can't insert nodes.", 1);
         }
 
         if let Some(name) = parent_feature.as_ref() {
@@ -218,10 +231,13 @@ static OUT_FORMAT: &str = "OUT_FORMAT";
 static MULTILINE: &str = "MULTILINE";
 static INSERTION_LABEL: &str = "INSERTION_LABEL";
 static INSERTION_SET: &str = "INSERTION_SET";
+static ID_SET: &str = "ID_SET";
+static ID_FEATURE_NAME: &str = "ID_FEATURE_NAME";
 static FILTER_SET: &str = "FILTER_SET";
 static PARENT: &str = "PARENT";
 static PROJECTIVIZE: &str = "PROJECTIVIZE";
 static REMOVE_DUMMIES: &str = "REMOVE_DUMMIES";
+static REATTACH: &str = "REATTACH";
 
 fn build<'a, 'b>() -> App<'a, 'b> {
     App::new("lumberjack-convert")
@@ -263,6 +279,9 @@ fn build<'a, 'b>() -> App<'a, 'b> {
         .arg(
             Arg::with_name(PARENT)
                 .long("parent")
+                .takes_value(true)
+                .value_name("FEATURE_NAME")
+                .default_value("parent")
                 .help("Annotate parent tags of terminals as feature."),
         )
         .arg(
@@ -275,8 +294,27 @@ fn build<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(INSERTION_LABEL)
                 .long("insertion_label")
                 .default_value("UNK")
+                .value_name("LABEL")
                 .takes_value(true)
                 .help("Label to insert."),
+        )
+        .arg(
+            Arg::with_name(ID_SET)
+                .long("id_set")
+                .value_name("ID_SET_FILE")
+                .takes_value(true)
+                .help(
+                    "Path to file with ID set. Annotates unique IDs for the nodes with tags \
+                     given in the file onto terminals.",
+                ),
+        )
+        .arg(
+            Arg::with_name(ID_FEATURE_NAME)
+                .long("id_feature")
+                .value_name("FEATURE_NAME")
+                .default_value("id")
+                .takes_value(true)
+                .help("Name of the feature that the IDs should be annotated under."),
         )
         .arg(
             Arg::with_name(FILTER_SET)
@@ -288,6 +326,13 @@ fn build<'a, 'b>() -> App<'a, 'b> {
             "Projectivize trees before writing. Required for conversions from NEGRA \
              to PTB and CONLLX with encoding.",
         ))
+        .arg(
+            Arg::with_name(REATTACH)
+                .long("reattach")
+                .takes_value(true)
+                .value_name("PREFIX")
+                .help("Reattach terminals with the given prefix to the root ndoe."),
+        )
         .arg(
             Arg::with_name(REMOVE_DUMMIES)
                 .long("remove_dummies")

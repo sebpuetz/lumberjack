@@ -26,8 +26,7 @@ mod tests {
     use conllx::graph::Sentence;
 
     use crate::io::{Decode, Encode, PTBFormat, TryFromConllx};
-    use crate::tree_modification::{Projectivize, TreeOps};
-    use crate::{NegraReader, Tree};
+    use crate::{NegraReader, Projectivize, Tree, UnaryChains};
 
     #[test]
     pub fn roundtrip() {
