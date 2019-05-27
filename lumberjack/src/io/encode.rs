@@ -311,7 +311,7 @@ impl Decode for Tree {
         let root = self.root();
         if self[root]
             .nonterminal()
-            .map(|nt| nt.label() == "DUMMY")
+            .map(|nt| nt.label() == EMPTY_NODE)
             .unwrap_or(false)
             && self.children(root).count() == 1
         {
