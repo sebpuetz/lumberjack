@@ -1,6 +1,6 @@
 [package]
 name = "lumberjack-utils"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Sebastian Puetz <sebastian.puetz@student.uni-tuebingen.de>"]
 edition = "2018"
 description = "Read and modify constituency trees."
@@ -13,5 +13,5 @@ repository = "https://github.com/sebpuetz/lumberjack"
 clap = "2"
 conllx = "0.11"
 failure = "0.1"
-lumberjack = { path = "../lumberjack", version = "0.3.0" }
+lumberjack = { path = "../lumberjack", version = "0.3" }
 stdinout = "0.4"
