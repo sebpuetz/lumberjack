@@ -145,7 +145,9 @@ impl From<Tree> for Sentence {
     fn from(mut tree: Tree) -> Self {
         let mut tokens = Vec::with_capacity(tree.n_terminals());
 
-        let terminals = tree.terminals().collect::<Vec<_>>();
+        let mut terminals = tree.terminals().collect::<Vec<_>>();
+        tree.sort_indices(&mut terminals);
+
         for terminal in terminals {
             let terminal = tree[terminal].terminal_mut().unwrap();
             let mut token = Token::new(terminal.set_form(String::new()));
@@ -167,17 +169,12 @@ impl From<Tree> for Sentence {
 }
 impl<'a> From<&'a Tree> for Sentence {
     fn from(tree: &'a Tree) -> Self {
-        let mut tokens = tree
-            .terminals()
-            .filter_map(|t| tree[t].terminal().map(|t| (t.into(), t.span().start)))
-            .collect::<Vec<_>>();
-
-        tokens.sort_by(|t0, t1| t0.1.cmp(&t1.1));
-        let mut sentence = Sentence::new();
-        for (token, _) in tokens {
-            sentence.push(token);
-        }
-        sentence
+        let mut terminals = tree.terminals().collect::<Vec<_>>();
+        tree.sort_indices(&mut terminals);
+        terminals
+            .into_iter()
+            .map(|t| tree[t].terminal().unwrap().into())
+            .collect()
     }
 }
 

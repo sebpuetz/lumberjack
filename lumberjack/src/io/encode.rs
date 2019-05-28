@@ -62,7 +62,8 @@ impl Encode for Tree {
         if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
-        let terminals = self.terminals().collect::<Vec<_>>();
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
         let mut encoding = Vec::with_capacity(terminals.len());
         for terminal in terminals.into_iter() {
             let common_nt = get_common(self, terminal)?
@@ -80,7 +81,8 @@ impl Encode for Tree {
         if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
-        let terminals = self.terminals().collect::<Vec<_>>();
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
         for terminal in terminals.into_iter() {
             let mut string_rep = get_common(self, terminal)?
                 .map(|(common, n_common)| AbsoluteAncestor::new(n_common, common).to_string())
@@ -104,7 +106,8 @@ impl Encode for Tree {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
         let mut prev_n = 0;
-        let terminals = self.terminals().collect::<Vec<_>>();
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
         let mut encoding = Vec::with_capacity(terminals.len());
         for terminal in terminals.into_iter() {
             let common_nt = match get_common(self, terminal)? {
@@ -132,7 +135,8 @@ impl Encode for Tree {
         if !self.is_projective() {
             return Err(format_err!("Can't encode nonprojective tree."));
         }
-        let terminals = self.terminals().collect::<Vec<_>>();
+        let mut terminals = self.terminals().collect::<Vec<_>>();
+        self.sort_indices(&mut terminals);
         let mut prev_n = 0;
         for terminal in terminals.into_iter() {
             let mut string_rep = get_common(self, terminal)?
