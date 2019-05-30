@@ -307,18 +307,22 @@ impl Tree {
         }
 
         let mut climber = Climber::new(parent, self);
+        let mut path = vec![parent];
         // climb tree to check if the old parent is dominated by the new parent
         while let Some(node) = climber.next(self) {
+            path.push(node);
             // if new parent is higher in the tree, we need to remove the indices from the old
             // parent's span
             if new_parent == node {
                 let coverage = self[child].span().into_iter().collect::<Vec<_>>();
-                let before = self[parent].continuity();
-                let after = self[parent]
-                    .nonterminal_mut()
-                    .unwrap()
-                    .remove_indices(coverage);
-                self.projectivity_change(before, after);
+                for node in path {
+                    let before = self[node].continuity();
+                    let after = self[node]
+                        .nonterminal_mut()
+                        .unwrap()
+                        .remove_indices(coverage.iter().cloned());
+                    self.projectivity_change(before, after);
+                }
                 break;
             }
         }
