@@ -270,7 +270,7 @@ impl UnaryChains for Tree {
                     let features = self[cur].features_mut();
                     let chain = features
                         .get_val("unary_chain")
-                        .map(|chain| format!("{}{}{}", chain, delim, label))
+                        .and_then(|chain| chain.map(|chain| format!("{}{}{}", chain, delim, label)))
                         .unwrap_or_else(|| label);
                     features.insert("unary_chain", Some(chain));
                 } else {
@@ -285,6 +285,8 @@ impl UnaryChains for Tree {
         let nodes = self.graph().node_indices().collect::<Vec<_>>();
         for mut cur in nodes {
             if let Some(chain) = self[cur].features_mut().remove("unary_chain") {
+                let chain =
+                    chain.ok_or_else(|| format_err!("Missing value for unary chain feature."))?;
                 for label in chain.split(delim) {
                     cur = self.insert_unary_above(cur, label);
                 }

@@ -491,7 +491,7 @@ mod test {
                 .features()
                 .unwrap()
                 .get_val("some"),
-            Some("feature")
+            Some(Some("feature"))
         );
         assert_eq!(format!("{}", nonterminal), "other_label")
     }

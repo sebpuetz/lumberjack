@@ -71,7 +71,8 @@ impl Encode for Tree {
 
             let chain = self[terminal]
                 .features()
-                .and_then(|f| f.get_val("unary_chain").map(ToOwned::to_owned));
+                .and_then(|f| f.get_val("unary_chain"))
+                .and_then(|val| val.map(ToOwned::to_owned));
             encoding.push((common_nt, chain));
         }
         Ok(AbsoluteEncoding(encoding))
@@ -87,7 +88,7 @@ impl Encode for Tree {
             let mut string_rep = get_common(self, terminal)?
                 .map(|(common, n_common)| AbsoluteAncestor::new(n_common, common).to_string())
                 .unwrap_or_else(|| "NONE".to_string());
-            if let Some(chain) = self[terminal]
+            if let Some(Some(chain)) = self[terminal]
                 .features()
                 .and_then(|f| f.get_val("unary_chain"))
             {
@@ -125,7 +126,8 @@ impl Encode for Tree {
 
             let chain = self[terminal]
                 .features()
-                .and_then(|f| f.get_val("unary_chain").map(ToOwned::to_owned));
+                .and_then(|f| f.get_val("unary_chain"))
+                .and_then(|val| val.map(ToOwned::to_owned));
             encoding.push((common_nt, chain));
         }
         Ok(RelativeEncoding(encoding))
@@ -151,7 +153,7 @@ impl Encode for Tree {
                 })
                 .unwrap_or_else(|| "NONE".to_string());
 
-            if let Some(chain) = self[terminal]
+            if let Some(Some(chain)) = self[terminal]
                 .features()
                 .and_then(|f| f.get_val("unary_chain"))
             {
@@ -180,12 +182,13 @@ fn get_common(tree: &Tree, terminal: NodeIndex) -> Result<Option<(String, usize)
             let common_nt = tree[parent]
                 .nonterminal()
                 .ok_or_else(|| format_err!("Terminal without parent:\n{}", tree[parent]))?;
-            let common_label =
-                if let Some(chain) = common_nt.features().and_then(|f| f.get_val("unary_chain")) {
-                    format!("{}_{}", chain, common_nt.label())
-                } else {
-                    common_nt.label().to_string()
-                };
+            let common_label = if let Some(Some(chain)) =
+                common_nt.features().and_then(|f| f.get_val("unary_chain"))
+            {
+                format!("{}_{}", chain, common_nt.label())
+            } else {
+                common_nt.label().to_string()
+            };
 
             common = Some(common_label);
         }

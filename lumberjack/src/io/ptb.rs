@@ -124,7 +124,7 @@ impl PTBFormat {
 
     fn fmt_inner(&self, nt: &NonTerminal, edge: Option<&str>) -> String {
         let mut representation = nt.label().to_string();
-        let annotation = if let Some(annotation) = nt
+        let annotation = if let Some(Some(annotation)) = nt
             .features()
             .map(|f| f.get_val(NODE_ANNOTATION_FEATURE_KEY))
         {

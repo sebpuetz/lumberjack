@@ -47,6 +47,7 @@ where
     }
 }
 
+#[allow(clippy::option_option)]
 impl Features {
     /// Construct empty `Features`.
     pub fn new() -> Self {
@@ -77,21 +78,15 @@ impl Features {
     }
 
     /// Get the value associated with `key`.
-    pub fn get_val(&self, key: &str) -> Option<&str> {
-        self.map
-            .get(key)
-            .and_then(|v| v.as_ref().map(String::as_str))
+    pub fn get_val(&self, key: &str) -> Option<Option<&str>> {
+        self.map.get(key).map(|v| v.as_ref().map(String::as_str))
     }
 
     /// Remove the tuple associated with `key`.
     ///
     /// Returns `None` if `key` was not found.
-    pub fn remove(&mut self, key: &str) -> Option<String> {
-        if let Some(rm) = self.map.remove(key) {
-            rm
-        } else {
-            None
-        }
+    pub fn remove(&mut self, key: &str) -> Option<Option<String>> {
+        self.map.remove(key)
     }
 }
 
@@ -128,9 +123,9 @@ mod test {
             .collect()
         );
         assert_eq!(features.to_string(), "another:one|key:value|some_feature");
-        assert_eq!(features.get_val("some_feature"), None);
-        assert_eq!(features.get_val("key"), (Some("value")));
-        assert_eq!(features.remove("some_feature"), None);
+        assert_eq!(features.get_val("some_feature"), Some(None));
+        assert_eq!(features.get_val("key"), Some(Some("value")));
+        assert_eq!(features.remove("some_feature"), Some(None));
         assert_eq!(features.remove("nonsense"), None);
         assert_eq!(features.get_val("nonsense"), None);
         assert_eq!(
