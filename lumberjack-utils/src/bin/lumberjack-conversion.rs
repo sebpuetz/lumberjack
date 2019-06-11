@@ -2,9 +2,11 @@
 extern crate failure;
 
 use std::convert::TryFrom;
+use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
 use clap::{App, AppSettings, Arg};
+use conllx::graph::Node;
 use conllx::io::{ReadSentence, Reader, Writer};
 use failure::Error;
 use stdinout::{Input, OrExit, Output};
@@ -13,7 +15,7 @@ use lumberjack::io::{
     Decode, Encode, PTBFormat, PTBLineFormat, PTBWriter, TryFromConllx, WriteTree,
 };
 use lumberjack::util::LabelSet;
-use lumberjack::{NegraReader, PTBReader, Projectivize, Tree, TreeOps, UnaryChains};
+use lumberjack::{AnnotatePOS, NegraReader, PTBReader, Projectivize, Tree, TreeOps, UnaryChains};
 
 fn main() {
     let app = build();
@@ -44,17 +46,40 @@ fn main() {
     let insertion_set = matches.value_of(INSERTION_SET).map(get_set_from_file);
     let insertion_label = matches.value_of(INSERTION_LABEL).unwrap();
 
+    let mut pos_sentences = matches.value_of(ANNOTATE_POS).map(|path| {
+        let f = File::open(path).or_exit("Can't read POS file.", 1);
+        Reader::new(BufReader::new(f))
+    });
+
     let mut writer = get_writer(out_formatter, writer);
 
     for tree in get_reader(in_format, reader, multiline) {
         let mut tree = tree.or_exit("Could not read tree.", 1);
-        if projectivize {
-            tree.projectivize();
-        }
 
         if remove_dummies {
             tree.remove_dummy_nodes()
                 .or_exit("Can't remove dummy nopdes.", 1);
+        }
+
+        if projectivize {
+            tree.projectivize();
+        }
+
+        if let Some(pos_sentences) = pos_sentences.as_mut() {
+            let sentence = pos_sentences
+                .read_sentence()
+                .or_exit(
+                    "Number of POS sentences doesn't match number of input sentences.",
+                    1,
+                )
+                .or_exit("Can't read POS sentence", 1);
+            tree.annotate_pos(
+                sentence
+                    .iter()
+                    .filter_map(Node::token)
+                    .map(|token| token.pos().or_exit("Token missing POS", 1)),
+            )
+            .or_exit("Failed to annotate POS.", 1);
         }
 
         if let Some(label) = reattach_label {
@@ -238,6 +263,7 @@ static PARENT: &str = "PARENT";
 static PROJECTIVIZE: &str = "PROJECTIVIZE";
 static REMOVE_DUMMIES: &str = "REMOVE_DUMMIES";
 static REATTACH: &str = "REATTACH";
+static ANNOTATE_POS: &str = "ANNOTATE_POS";
 
 fn build<'a, 'b>() -> App<'a, 'b> {
     App::new("lumberjack-convert")
@@ -336,5 +362,12 @@ fn build<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(REMOVE_DUMMIES)
                 .long("remove_dummies")
                 .help("Remove nodes with DUMMY label as introduced by incorrect tag sequences."),
+        )
+        .arg(
+            Arg::with_name(ANNOTATE_POS)
+                .long("pos")
+                .value_name("FILE")
+                .help("CONLLX format file with Part-of-speech tags.")
+                .takes_value(true),
         )
 }
