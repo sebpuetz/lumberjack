@@ -3,7 +3,7 @@ pub use crate::io::conllx::{ToConllx, TryFromConllx};
 mod encode;
 pub use crate::io::encode::{AbsoluteEncoding, Decode, Encode, RelativeEncoding};
 mod negra;
-pub use crate::io::negra::{negra_to_tree, NegraReader};
+pub use crate::io::negra::NegraReader;
 mod ptb;
 pub use crate::io::ptb::{PTBFormat, PTBLineFormat, PTBReader, PTBWriter};
 

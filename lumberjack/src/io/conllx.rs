@@ -180,14 +180,15 @@ impl<'a> From<&'a Tree> for Sentence {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::fs::File;
+    use std::io::BufReader;
 
     use conllx::graph::Sentence;
     use conllx::token::{Features, Token, TokenBuilder};
 
     use crate::io::conllx::ToConllx;
-    use crate::io::negra::negra_to_tree;
     use crate::io::ptb::PTBFormat;
+    use crate::NegraReader;
 
     #[test]
     fn to_conllx() {
@@ -212,8 +213,9 @@ mod tests {
         target.push(TokenBuilder::new("line").pos("NX").into());
         assert_eq!(conll_sentence, target);
 
-        let input = fs::read_to_string("testdata/long_single.negra").unwrap();
-        let tree = negra_to_tree(&input).unwrap();
+        let f = File::open("testdata/long_single.negra").unwrap();
+        let mut reader = NegraReader::new(BufReader::new(f));
+        let tree = reader.next().unwrap().unwrap();
         let conll_sentence = tree.to_conllx();
         assert_eq!(
             &Token::from(TokenBuilder::new("V").lemma("v").pos("ADJD")),
@@ -228,7 +230,7 @@ mod tests {
                 TokenBuilder::new("e")
                     .lemma("e")
                     .pos("ART")
-                    .features(Features::from_string("gsf"))
+                    .features(Features::from_string("morph:gsf"))
             ),
             conll_sentence[6].token().unwrap()
         );
@@ -246,7 +248,7 @@ mod tests {
                 TokenBuilder::new("e")
                     .lemma("e")
                     .pos("ART")
-                    .features(Features::from_string("gsf"))
+                    .features(Features::from_string("morph:gsf"))
             ),
             conll_sentence[6].token().unwrap()
         );
