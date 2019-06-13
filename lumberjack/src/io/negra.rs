@@ -1,11 +1,12 @@
-use std::collections::{hash_map::Entry, HashMap};
-use std::io::{BufRead, Lines};
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
+use std::io::{BufRead, Lines, Write};
 
 use failure::Error;
 use petgraph::prelude::{Direction, NodeIndex, StableGraph};
+use petgraph::visit::{VisitMap, Visitable};
 
 use crate::io::NODE_ANNOTATION_FEATURE_KEY;
-use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
+use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree, WriteTree};
 
 /// Iterator over constituency trees in a Negra export file.
 ///
@@ -45,7 +46,7 @@ where
         while let Some(line) = self.inner.next() {
             let line = match line {
                 Ok(line) => line,
-                Err(e) => return Some(Err(format_err!("{}", e))),
+                Err(e) => return Some(Err(e.into())),
             };
             let line = line.trim();
             if line.starts_with("#BOS") {
@@ -243,7 +244,9 @@ impl Builder {
         // unlabeled edges denoted as "--" in tueba
         let edge = if edge == "--" { None } else { Some(edge) };
         let mut terminal = Terminal::new(form, pos, self.n_terminals);
-        terminal.set_lemma(Some(lemma));
+        if lemma != "--" {
+            terminal.set_lemma(Some(lemma));
+        }
         if morph != "--" {
             terminal.features_mut().insert("morph", Some(morph));
         }
@@ -273,15 +276,204 @@ fn read_required_numerical_field(field: Option<&str>) -> Result<usize, Error> {
     }
 }
 
+/// Writer for Negra export 4 format.
+///
+/// Write trees in pointer based Negra export 4 format. This format allows for discontinuous
+/// phrases.
+///
+/// The sentence ID is taken from the root node's `"sentence_id"` feature. Other metadata is taken
+/// from the root's `"metadata"` feature. This metadata is usually the annotator ID, unix timestamp
+/// since last edit and a file ID as well as other comments about the sentence. The metadata is
+/// written as is.
+///
+/// Since the reader doesn't take secondary edges and comments for nodes into account, this
+/// information is lost in a Negra roundtrip.
+pub struct NegraWriter<W> {
+    writer: W,
+    counter: usize,
+}
+
+impl<W> NegraWriter<W> {
+    /// Construct a new writer.
+    pub fn new(writer: W) -> Self {
+        NegraWriter { writer, counter: 0 }
+    }
+
+    /// Return a string with spaces as padding.
+    fn pad(len: usize, to: usize) -> String {
+        if len >= to + 8 {
+            " ".to_string()
+        } else if len < to + 8 {
+            (len..to + 8).map(|_| " ").collect()
+        } else {
+            (len..to).map(|_| " ").collect()
+        }
+    }
+
+    /// Convert a terminal to its Negra String representation.
+    ///
+    /// The string representation does not include the edge and parent ID.
+    fn terminal_to_negra_line(terminal: &Terminal) -> String {
+        let mut string_rep = String::with_capacity(84);
+        string_rep.push_str(terminal.form());
+        string_rep.push_str(&Self::pad(terminal.form().len(), 24));
+        let lemma = terminal.lemma().unwrap_or_else(|| "--");
+        string_rep.push_str(lemma);
+        string_rep.push_str(&Self::pad(lemma.len(), 24));
+        string_rep.push_str(terminal.label());
+        string_rep.push_str(&Self::pad(terminal.label().len(), 8));
+        let features = terminal.features();
+        if let Some(Some(morph)) = features.and_then(|f| f.get_val("morph")) {
+            string_rep.push_str(morph);
+            string_rep.push_str(&Self::pad(morph.len(), 16));
+        } else {
+            string_rep.push_str("--");
+            string_rep.push_str(&Self::pad(2, 16));
+        }
+        string_rep
+    }
+
+    /// Convert a NonTerminal to its Negra String representation.
+    ///
+    /// The string representation does not include the edge and parent ID.
+    fn nonterminal_to_negra_line(id: &str, nt: &NonTerminal) -> String {
+        let mut nt_rep = String::with_capacity(84);
+        nt_rep.push('#');
+        nt_rep.push_str(&id);
+        nt_rep.push_str(&Self::pad(id.len() + 1, 24));
+        nt_rep.push_str("--");
+        nt_rep.push_str(&Self::pad(2, 24));
+        let mut label = nt.label().to_string();
+        if let Some(Some(annotation)) = nt
+            .features()
+            .and_then(|f| f.get_val(NODE_ANNOTATION_FEATURE_KEY))
+        {
+            label.push('=');
+            label.push_str(annotation);
+        }
+        nt_rep.push_str(&label);
+        nt_rep.push_str(&Self::pad(label.len(), 8));
+        nt_rep.push_str("--");
+        nt_rep.push_str(&Self::pad(2, 16));
+        nt_rep
+    }
+
+    /// Get the Negra String representation for edge and parent ID.
+    fn get_parent_edge(idx: NodeIndex, tree: &Tree, id_map: &HashMap<NodeIndex, String>) -> String {
+        let (parent, edge) = tree.parent(idx).unwrap();
+        let edge = tree[edge].label().unwrap_or_else(|| "--");
+        if parent == tree.root() {
+            format!("{}{}0", edge, Self::pad(edge.len(), 8))
+        } else {
+            format!(
+                "{}{}{}",
+                edge,
+                Self::pad(edge.len(), 8),
+                id_map.get(&parent).unwrap()
+            )
+        }
+    }
+}
+
+impl<W> WriteTree for NegraWriter<W>
+where
+    W: Write,
+{
+    fn write_tree(&mut self, tree: &Tree) -> Result<(), Error> {
+        let sentence_id = if let Some(Some(sentence_id)) = tree[tree.root()]
+            .features()
+            .and_then(|f| f.get_val("sentence_id"))
+        {
+            sentence_id.to_string()
+        } else {
+            self.counter += 1;
+            (self.counter - 1).to_string()
+        };
+        if let Some(Some(metadata)) = tree[tree.root()]
+            .features()
+            .and_then(|f| f.get_val("metadata"))
+        {
+            writeln!(self.writer, "#BOS {}  {}", sentence_id, metadata)?;
+        } else {
+            writeln!(self.writer, "#BOS {}", sentence_id)?;
+        };
+
+        let mut terminals = tree.terminals().collect::<Vec<_>>();
+        tree.sort_indices(&mut terminals);
+        let mut visit_map = tree.graph().visit_map();
+        let mut count = 500;
+
+        let mut nt_id_map = HashMap::new();
+        let mut queue = VecDeque::new();
+
+        // find nonterminals that don't dominate other nonterminals
+        for &terminal in terminals.iter() {
+            visit_map.visit(terminal);
+            if let Some((parent, _)) = tree.parent(terminal) {
+                if tree.children(parent).all(|(n, _)| tree[n].is_terminal()) {
+                    queue.push_back(parent);
+                }
+            }
+        }
+
+        // assign numbers from 500 onwards to nonterminals
+        let mut nts = Vec::new();
+        while let Some(node) = queue.pop_front() {
+            if !visit_map.visit(node) || tree.root() == node {
+                continue;
+            }
+            nt_id_map.insert(node, count.to_string());
+            nts.push(node);
+            count += 1;
+            if let Some((parent, _)) = tree.parent(node) {
+                if tree.children(parent).all(|(n, _)| visit_map.is_visited(&n)) {
+                    queue.push_front(parent);
+                }
+            }
+        }
+
+        for terminal_idx in terminals {
+            let terminal = tree[terminal_idx].terminal().unwrap();
+            write!(self.writer, "{}", Self::terminal_to_negra_line(terminal))?;
+            writeln!(
+                self.writer,
+                "{}",
+                Self::get_parent_edge(terminal_idx, tree, &nt_id_map)
+            )?;
+        }
+
+        for nt_idx in nts.into_iter() {
+            let nt_id = nt_id_map.get(&nt_idx).map(String::as_str).unwrap();
+            let nt = tree[nt_idx].nonterminal().unwrap();
+            write!(
+                self.writer,
+                "{}",
+                Self::nonterminal_to_negra_line(nt_id, nt)
+            )?;
+            writeln!(
+                self.writer,
+                "{}",
+                Self::get_parent_edge(nt_idx, tree, &nt_id_map)
+            )?;
+        }
+
+        writeln!(self.writer, "#EOS {}\n", sentence_id)?;
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use petgraph::prelude::{NodeIndex, StableGraph};
     use std::fs::File;
     use std::io::BufReader;
 
-    use petgraph::prelude::{NodeIndex, StableGraph};
+    use super::{NegraReader, NegraWriter};
 
-    use crate::io::{negra::Builder, NODE_ANNOTATION_FEATURE_KEY};
-    use crate::{Edge, Features, NegraReader, Node, NonTerminal, Span, Terminal, Tree};
+    use crate::io::negra::Builder;
+    use crate::io::NODE_ANNOTATION_FEATURE_KEY;
+    use crate::{Edge, Features, Node, NonTerminal, Span, Terminal, Tree, WriteTree};
 
     #[test]
     fn test_first10_ok() {
@@ -289,7 +481,12 @@ mod tests {
         let reader = BufReader::new(input);
         let mut n = 0;
         for tree in NegraReader::new(reader) {
-            tree.unwrap();
+            let tree = tree.unwrap();
+            let mut buffer = Vec::new();
+            let mut negra_writer = NegraWriter::new(&mut buffer);
+            negra_writer.write_tree(&tree).unwrap();
+            let mut negra_iter = NegraReader::new(BufReader::new(buffer.as_slice()));
+            assert_eq!(tree, negra_iter.next().unwrap().unwrap());
             n += 1;
         }
         assert_eq!(n, 10)
@@ -347,10 +544,7 @@ mod tests {
             .insert("metadata", Some("2 1202391857 0 %% HEADLINE"));
         g[root].features_mut().insert("sentence_id", Some("1"));
         let v = g.add_node(v.into());
-        let vxfin = g.add_node(NonTerminal::new(
-            "VXFIN",
-            Span::new(0, 1),
-        ).into());
+        let vxfin = g.add_node(NonTerminal::new("VXFIN", Span::new(0, 1)).into());
         let d = g.add_node(d.into());
         let mut nxorg = NonTerminal::new("NX", Span::new(1, 3));
         nxorg
@@ -363,12 +557,8 @@ mod tests {
         let punct = g.add_node(punct.into());
 
         let lk = g.add_node(NonTerminal::new("LK", Span::new(0, 1)).into());
-        let simpx = g.add_node(NonTerminal::new(
-            "SIMPX",
-            Span::new(0, 4),
-        ).into());
+        let simpx = g.add_node(NonTerminal::new("SIMPX", Span::new(0, 4)).into());
         let mf = g.add_node(Node::NonTerminal(NonTerminal::new("MF", Span::new(1, 4))));
-
 
         g.add_edge(vxfin, v, Edge::from(Some("HD")));
         g.add_edge(nxorg, d, Edge::from(Some("-NE")));

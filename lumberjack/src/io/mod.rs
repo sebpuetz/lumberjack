@@ -3,7 +3,7 @@ pub use crate::io::conllx::{ToConllx, TryFromConllx};
 mod encode;
 pub use crate::io::encode::{AbsoluteEncoding, Decode, Encode, RelativeEncoding};
 mod negra;
-pub use crate::io::negra::NegraReader;
+pub use crate::io::negra::{NegraReader, NegraWriter};
 mod ptb;
 pub use crate::io::ptb::{PTBFormat, PTBLineFormat, PTBReader, PTBWriter};
 
@@ -25,8 +25,8 @@ mod tests {
 
     use conllx::graph::Sentence;
 
-    use crate::io::{Decode, Encode, PTBFormat, TryFromConllx};
-    use crate::{NegraReader, Projectivize, Tree, UnaryChains};
+    use crate::io::{Decode, Encode, PTBFormat, TryFromConllx, PTBLineFormat, NegraWriter, WriteTree};
+    use crate::{NegraReader, Projectivize, Tree, UnaryChains, PTBReader};
 
     #[test]
     pub fn roundtrip() {
@@ -54,6 +54,38 @@ mod tests {
             assert_eq!(ptb_tree, negra_to_ptb);
         }
     }
+
+    #[test]
+    pub fn ptb_to_negra() {
+        let ptb_input = File::open("testdata/test.ptb").unwrap();
+        let ptb_reader = PTBReader::new(BufReader::new(ptb_input), PTBFormat::TueBa, PTBLineFormat::SingleLine);
+        for (idx, tree) in ptb_reader.enumerate() {
+            let mut tree = tree.unwrap();
+            let root = tree.root();
+            tree[root].features_mut().insert("sentence_id", Some(idx.to_string()));
+            let mut buffer = Vec::new();
+            let mut negra_writer = NegraWriter::new(&mut buffer);
+            negra_writer.write_tree(&tree).unwrap();
+            let mut negra_iter = NegraReader::new(BufReader::new(buffer.as_slice()));
+            let new_tree = negra_iter.next().unwrap().unwrap();
+            assert_eq!(tree, new_tree)
+        }
+    }
+
+    #[test]
+    fn negra_roundtrip() {
+        let negra_input = File::open("testdata/test.negra").unwrap();
+        let negra_reader = NegraReader::new(BufReader::new(negra_input));
+        for tree in negra_reader {
+            let tree = tree.unwrap();
+            let mut buffer = Vec::new();
+            let mut negra_writer = NegraWriter::new(&mut buffer);
+            negra_writer.write_tree(&tree).unwrap();
+            let mut negra_iter = NegraReader::new(BufReader::new(buffer.as_slice()));
+            assert_eq!(tree, negra_iter.next().unwrap().unwrap())
+        }
+    }
+
 
     #[test]
     pub fn encoding_roundtrip() {
