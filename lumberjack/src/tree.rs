@@ -715,9 +715,9 @@ impl Tree {
 
     /// Resets nonterminal spans based on terminal spans.
     pub(crate) fn reset_nt_spans(&mut self) {
-        let mut dfs = DfsPostOrder::new(&self.graph, self.root);
+        let mut dfs = DfsPostOrder::new(GraphWrap::new(&self.graph), self.root);
         self.num_discontinuous = 0;
-        while let Some(node) = dfs.next(&self.graph) {
+        while let Some(node) = dfs.next(GraphWrap::new(&self.graph)) {
             if !self[node].is_terminal() {
                 let coverage = self
                     .children(node)
