@@ -25,8 +25,10 @@ mod tests {
 
     use conllx::graph::Sentence;
 
-    use crate::io::{Decode, Encode, PTBFormat, TryFromConllx, PTBLineFormat, NegraWriter, WriteTree};
-    use crate::{NegraReader, Projectivize, Tree, UnaryChains, PTBReader};
+    use crate::io::{
+        Decode, Encode, NegraWriter, PTBFormat, PTBLineFormat, TryFromConllx, WriteTree,
+    };
+    use crate::{NegraReader, PTBReader, Projectivize, Tree, UnaryChains};
 
     #[test]
     pub fn roundtrip() {
@@ -44,8 +46,7 @@ mod tests {
         let ptb_input = File::open("testdata/test.ptb").unwrap();
         let mut ptb_reader = BufReader::new(ptb_input).lines();
         let negra_input = File::open("testdata/test.negra").unwrap();
-        let negra_reader = BufReader::new(negra_input);
-        let negra_reader = NegraReader::new(negra_reader);
+        let negra_reader = NegraReader::new(BufReader::new(negra_input));
         for tree in negra_reader {
             let ptb_tree = ptb_reader.next().unwrap().unwrap();
             let mut negra_tree = tree.unwrap();
@@ -58,11 +59,17 @@ mod tests {
     #[test]
     pub fn ptb_to_negra() {
         let ptb_input = File::open("testdata/test.ptb").unwrap();
-        let ptb_reader = PTBReader::new(BufReader::new(ptb_input), PTBFormat::TueBa, PTBLineFormat::SingleLine);
+        let ptb_reader = PTBReader::new(
+            BufReader::new(ptb_input),
+            PTBFormat::TueBa,
+            PTBLineFormat::SingleLine,
+        );
         for (idx, tree) in ptb_reader.enumerate() {
             let mut tree = tree.unwrap();
             let root = tree.root();
-            tree[root].features_mut().insert("sentence_id", Some(idx.to_string()));
+            tree[root]
+                .features_mut()
+                .insert("sentence_id", Some(idx.to_string()));
             let mut buffer = Vec::new();
             let mut negra_writer = NegraWriter::new(&mut buffer);
             negra_writer.write_tree(&tree).unwrap();
@@ -85,7 +92,6 @@ mod tests {
             assert_eq!(tree, negra_iter.next().unwrap().unwrap())
         }
     }
-
 
     #[test]
     pub fn encoding_roundtrip() {

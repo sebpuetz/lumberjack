@@ -2,8 +2,9 @@ use failure::Error;
 use petgraph::prelude::{DfsPostOrder, NodeIndex};
 use petgraph::visit::{VisitMap, Visitable};
 
+use crate::tree::GraphWrap;
 use crate::util::Climber;
-use crate::Tree;
+use crate::{Edge, Tree};
 
 /// Trait to annotate Part of Speech tags.
 ///
@@ -303,18 +304,19 @@ impl UnaryChains for Tree {
 /// Projectivization is done by re-attaching the non-projective content at the highest point
 /// allowing non-crossing edges while maintaining the linear order of the sentence.
 pub trait Projectivize {
-    fn projectivize(&mut self);
+    fn projectivize(&mut self) -> Option<Vec<(NodeIndex, Edge, NodeIndex)>>;
 }
 
 impl Projectivize for Tree {
-    fn projectivize(&mut self) {
+    fn projectivize(&mut self) -> Option<Vec<(NodeIndex, Edge, NodeIndex)>> {
         if !self.is_projective() {
+            let mut v = Vec::new();
             let mut terminals = self.terminals().collect::<Vec<_>>();
             // terminals need to be sorted, otherwise indexing through spans can be incorrect
             self.sort_indices(&mut terminals);
 
-            let mut dfs = DfsPostOrder::new(self.graph(), self.root());
-            while let Some(attachment_point) = dfs.next(self.graph()) {
+            let mut dfs = DfsPostOrder::new(GraphWrap::new(self.graph()), self.root());
+            while let Some(attachment_point) = dfs.next(GraphWrap::new(self.graph())) {
                 // as long as the node at attachment_point is discontinuous, skipped indices will
                 // be returned.
                 while let Some(&skipped) = self[attachment_point]
@@ -322,6 +324,7 @@ impl Projectivize for Tree {
                     .skips()
                     .and_then(|s| s.iter().next())
                 {
+                    let mut prev = terminals[skipped];
                     // start climbing at skipped index
                     let mut climber = Climber::new(terminals[skipped], self);
                     while let Some((handle_parent, handle_edge)) = climber.next_with_edge(&self) {
@@ -334,16 +337,21 @@ impl Projectivize for Tree {
                         {
                             let (new_edge, edge) =
                                 self.reattach_node(attachment_point, handle_edge).unwrap();
+                            v.push((handle_parent, edge.clone(), prev));
                             self[new_edge] = edge;
                             break;
                         }
+                        prev = handle_parent;
                     }
                 }
                 // return if all spans have been fixed
                 if self.is_projective() {
-                    return;
+                    return Some(v);
                 }
             }
+            Some(v)
+        } else {
+            None
         }
     }
 }

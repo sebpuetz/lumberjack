@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 use failure::Error;
 use fixedbitset::FixedBitSet;
 use petgraph::prelude::{Direction, EdgeIndex, EdgeRef, NodeIndex, StableGraph};
-use petgraph::visit::{Dfs, DfsPostOrder, VisitMap};
+use petgraph::visit::{Dfs, DfsPostOrder, GraphRef, VisitMap};
 
 use crate::util::Climber;
 use crate::{Continuity, Edge, Node, NonTerminal, Span, Terminal};
@@ -73,10 +73,25 @@ impl Tree {
     /// * Returns `NodeIndex` of immediately dominating node and corresponding `EdgeIndex`.
     /// * Returns `None` if `node` doesn't exist or doesn't have incoming edges.
     pub fn parent(&self, node: NodeIndex) -> Option<(NodeIndex, EdgeIndex)> {
-        self.graph
-            .edges_directed(node, Direction::Incoming)
-            .next()
-            .map(|edge_ref| (edge_ref.source(), edge_ref.id()))
+        for edge in self.graph.edges_directed(node, Direction::Incoming) {
+            if edge.weight().is_primary() {
+                return Some((edge.source(), edge.id()));
+            }
+        }
+        None
+    }
+
+    /// Get the secondary parent and corresponding edge of a tree node.
+    ///
+    /// * Returns `NodeIndex` of immediately dominating node and corresponding `EdgeIndex`.
+    /// * Returns `None` if `node` doesn't exist or doesn't have incoming edges.
+    pub fn secondary_parent(&self, node: NodeIndex) -> Option<(NodeIndex, EdgeIndex)> {
+        for edge in self.graph.edges_directed(node, Direction::Incoming) {
+            if !edge.weight().is_primary() {
+                return Some((edge.source(), edge.id()));
+            }
+        }
+        None
     }
 
     /// Get an iterator over `node`'s children.
@@ -86,7 +101,44 @@ impl Tree {
     ) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + 'a {
         self.graph
             .edges_directed(node, Direction::Outgoing)
+            .filter(|edge_ref| edge_ref.weight().is_primary())
             .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
+    }
+
+    /// Get an iterator over secondary children.
+    pub fn secondary_children<'a>(
+        &'a self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + 'a {
+        self.graph
+            .edges_directed(node, Direction::Outgoing)
+            .filter(|edge_ref| !edge_ref.weight().is_primary())
+            .map(|edge_ref| (edge_ref.target(), edge_ref.id()))
+    }
+
+    /// Adds a new secondary edge to the graph.
+    pub fn add_secondary_edge<S>(
+        &mut self,
+        parent: NodeIndex,
+        child: NodeIndex,
+        label: Option<S>,
+    ) -> EdgeIndex
+    where
+        S: Into<String>,
+    {
+        self.graph
+            .add_edge(parent, child, Edge::new_secondary(label))
+    }
+
+    /// Removes a secondary edge from the graph.
+    ///
+    /// Returns `None` if the edge is not present in the graph.
+    pub fn remove_secondary_edge(&mut self, edge: EdgeIndex) -> Option<Edge> {
+        if !self[edge].is_primary() {
+            self.graph.remove_edge(edge)
+        } else {
+            None
+        }
     }
 
     /// Move a Terminal to a different position in the sentence.
@@ -146,7 +198,8 @@ impl Tree {
             }
         }
         let terminal = self.graph.add_node(terminal.into());
-        self.graph.add_edge(parent, terminal, Edge::default());
+        self.graph
+            .add_edge(parent, terminal, Edge::new_primary::<String>(None));
         self.reset_nt_spans();
         self.n_terminals += 1;
         terminal
@@ -182,7 +235,8 @@ impl Tree {
         let terminal = Terminal::new(form, pos, self.n_terminals);
         self.n_terminals += 1;
         let terminal = self.graph.add_node(terminal.into());
-        self.graph.add_edge(self.root, terminal, Edge::default());
+        self.graph
+            .add_edge(self.root, terminal, Edge::new_primary::<String>(None));
         let root = self.root;
         self[root].extend_span().unwrap();
         Ok(terminal)
@@ -200,10 +254,12 @@ impl Tree {
         let insert = self.graph.add_node(node);
         if let Some((parent, old_edge_idx)) = self.parent(child) {
             let old_edge = self.graph.remove_edge(old_edge_idx).unwrap();
-            self.graph.add_edge(parent, insert, Edge::default());
+            self.graph
+                .add_edge(parent, insert, Edge::new_primary::<String>(None));
             self.graph.add_edge(insert, child, old_edge);
         } else {
-            self.graph.add_edge(insert, child, Edge::default());
+            self.graph
+                .add_edge(insert, child, Edge::new_primary::<String>(None));
             if child == self.root {
                 self.root = insert;
             }
@@ -234,10 +290,12 @@ impl Tree {
         let span = self[node].span().to_owned();
         let new_node = NonTerminal::new(node_label, span).into();
         let insert = self.graph.add_node(new_node);
-        self.graph.add_edge(node, insert, Edge::default());
+        self.graph
+            .add_edge(node, insert, Edge::new_primary::<String>(None));
         for (child, edge) in children {
             self.graph.remove_edge(edge).unwrap();
-            self.graph.add_edge(insert, child, Edge::default());
+            self.graph
+                .add_edge(insert, child, Edge::new_primary::<String>(None));
         }
         Ok(insert)
     }
@@ -281,6 +339,9 @@ impl Tree {
     ///
     /// Returns `Ok(old_edge)` otherwise.
     ///
+    /// If `edge` indexes a secondary edge, this method will not perform a check whether `edge`
+    /// was the last outgoing node of the original parent.
+    ///
     /// Panics if any of the indices is not present in the tree.
     pub fn reattach_node(
         &mut self,
@@ -296,57 +357,16 @@ impl Tree {
             "Edge to be removed has to be in the tree."
         );
 
-        // ensure we're not removing the last child of a node and that the attachment point is NT
-        let (parent, child) = self.graph.edge_endpoints(edge).unwrap();
-        if self.siblings(child).count() == 0 && parent != new_parent {
-            return Err(format_err!("Last child of a node."));
-        } else if self[new_parent].is_terminal() {
-            return Err(format_err!("Terminal node as new parent."));
-        } else if child == new_parent {
+        // ensure that the attachment point is NT
+        let (_, child) = self.graph.edge_endpoints(edge).unwrap();
+        if child == new_parent {
             return Err(format_err!("New parent is node itself."));
         }
 
-        let mut climber = Climber::new(parent, self);
-        let mut path = vec![parent];
-        // climb tree to check if the old parent is dominated by the new parent
-        while let Some(node) = climber.next(self) {
-            path.push(node);
-            // if new parent is higher in the tree, we need to remove the indices from the old
-            // parent's span
-            if new_parent == node {
-                let coverage = self[child].span().into_iter().collect::<Vec<_>>();
-                for node in path {
-                    let before = self[node].continuity();
-                    let after = self[node]
-                        .nonterminal_mut()
-                        .unwrap()
-                        .remove_indices(coverage.iter().cloned());
-                    self.projectivity_change(before, after);
-                }
-                break;
-            }
+        match self[edge] {
+            Edge::Primary(_) => self.reattach_primary(new_parent, edge),
+            Edge::Secondary(_) => Ok(self.reattach_secondary(new_parent, edge)),
         }
-        let edge = self.graph.remove_edge(edge).unwrap();
-        let edge_idx = self.graph.add_edge(new_parent, child, Edge::default());
-        let child_span = self[child].span().to_owned();
-
-        let mut climber = Climber::new(child, self);
-        while let Some(parent) = climber.next(self) {
-            // if new parent doesn't cover the child's span, extend new parent's span.
-            if self.graph[parent].span().covers_span(&child_span) {
-                break;
-            } else {
-                let before = self[parent].nonterminal().unwrap().continuity();
-                // extending the new parent's span can change projectivity
-                let after = self[parent]
-                    .nonterminal_mut()
-                    .unwrap()
-                    .merge_spans(&child_span);
-                self.projectivity_change(before, after);
-            };
-        }
-
-        Ok((edge_idx, edge))
     }
 
     /// Get an iterator over `node`'s siblings.
@@ -570,6 +590,71 @@ impl Tree {
         self.num_discontinuous
     }
 
+    fn reattach_primary(
+        &mut self,
+        new_parent: NodeIndex,
+        edge: EdgeIndex,
+    ) -> Result<(EdgeIndex, Edge), Error> {
+        let (parent, child) = self.graph.edge_endpoints(edge).unwrap();
+        // ensure we're not removing the last child of a node
+        if self[new_parent].is_terminal() {
+            return Err(format_err!("Terminal node as new parent."));
+        } else if self.siblings(child).count() == 0 && parent != new_parent {
+            return Err(format_err!("Last child of a node."));
+        }
+        let mut climber = Climber::new(parent, self);
+        let mut path = vec![parent];
+        // climb tree to check if the old parent is dominated by the new parent
+        while let Some(node) = climber.next(self) {
+            path.push(node);
+            // if new parent is higher in the tree, we need to remove the indices from the old
+            // parent's span
+            if new_parent == node {
+                let coverage = self[child].span().into_iter().collect::<Vec<_>>();
+                for node in path {
+                    let before = self[node].continuity();
+                    let after = self[node]
+                        .nonterminal_mut()
+                        .unwrap()
+                        .remove_indices(coverage.iter().cloned());
+                    self.projectivity_change(before, after);
+                }
+                break;
+            }
+        }
+        let edge = self.graph.remove_edge(edge).unwrap();
+        let edge_idx = self
+            .graph
+            .add_edge(new_parent, child, Edge::new_primary::<String>(None));
+        let child_span = self[child].span().to_owned();
+
+        let mut climber = Climber::new(child, self);
+        while let Some(parent) = climber.next(self) {
+            // if new parent doesn't cover the child's span, extend new parent's span.
+            if self.graph[parent].span().covers_span(&child_span) {
+                break;
+            } else {
+                let before = self[parent].nonterminal().unwrap().continuity();
+                // extending the new parent's span can change projectivity
+                let after = self[parent]
+                    .nonterminal_mut()
+                    .unwrap()
+                    .merge_spans(&child_span);
+                self.projectivity_change(before, after);
+            };
+        }
+        Ok((edge_idx, edge))
+    }
+
+    fn reattach_secondary(&mut self, new_parent: NodeIndex, edge: EdgeIndex) -> (EdgeIndex, Edge) {
+        let (_, child) = self.graph.edge_endpoints(edge).unwrap();
+        let edge = self.graph.remove_edge(edge).unwrap();
+        let edge_idx = self
+            .graph
+            .add_edge(new_parent, child, Edge::Secondary(None));
+        (edge_idx, edge)
+    }
+
     /// Remove nonterminal node from the graph.
     ///
     /// Panics if a terminal node is given as argument.
@@ -580,7 +665,8 @@ impl Tree {
         );
         if let Some((parent, _)) = self.parent(nonterminal) {
             for (child, _) in self.children(nonterminal).collect::<Vec<_>>() {
-                self.graph.add_edge(parent, child, Edge::default());
+                self.graph
+                    .add_edge(parent, child, Edge::new_primary::<String>(None));
             }
         } else if self.children(self.root).count() == 1 {
             let (child, _) = self.children(self.root).next().unwrap();
@@ -766,7 +852,7 @@ impl<'a> TerminalDescendents<'a, FixedBitSet> {
     fn new(tree: &'a Tree, node: NodeIndex) -> Self {
         TerminalDescendents {
             tree,
-            dfs: Dfs::new(tree.graph(), node),
+            dfs: Dfs::new(GraphWrap(tree.graph()), node),
         }
     }
 }
@@ -778,7 +864,7 @@ where
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.dfs.next(self.tree.graph()) {
+        while let Some(node) = self.dfs.next(GraphWrap(self.tree.graph())) {
             if self.tree[node].is_terminal() {
                 return Some(node);
             } else {
@@ -786,6 +872,46 @@ where
             }
         }
         None
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct GraphWrap<'a>(&'a StableGraph<Node, Edge>);
+impl<'a> GraphWrap<'a> {
+    pub(crate) fn new(graph: &'a StableGraph<Node, Edge>) -> Self {
+        GraphWrap(graph)
+    }
+}
+
+use petgraph::visit::{GraphBase, IntoNeighbors, Visitable};
+
+impl<'a> GraphBase for GraphWrap<'a> {
+    type EdgeId = EdgeIndex;
+    type NodeId = NodeIndex;
+}
+
+impl<'a> GraphRef for GraphWrap<'a> {}
+
+impl<'a> IntoNeighbors for GraphWrap<'a> {
+    type Neighbors = Box<Iterator<Item = NodeIndex> + 'a>;
+    fn neighbors(self, node: NodeIndex) -> Self::Neighbors {
+        Box::new(
+            self.0
+                .edges_directed(node, Direction::Outgoing)
+                .filter(|edge| edge.weight().is_primary())
+                .map(|edge| edge.target()),
+        )
+    }
+}
+
+impl<'a> Visitable for GraphWrap<'a> {
+    type Map = FixedBitSet;
+    fn visit_map(&self) -> Self::Map {
+        self.0.visit_map()
+    }
+
+    fn reset_map(&self, map: &mut Self::Map) {
+        self.0.reset_map(map)
     }
 }
 
@@ -1087,7 +1213,10 @@ mod tests {
         let mut tree = some_tree();
         let terminals = tree.terminals().collect::<Vec<_>>();
         let (parent, edge) = tree.parent(terminals[0]).unwrap();
-        assert_eq!(Edge::default(), tree.reattach_node(parent, edge).unwrap().1);
+        assert_eq!(
+            Edge::new_primary::<String>(None),
+            tree.reattach_node(parent, edge).unwrap().1
+        );
         assert_eq!(tree, some_tree());
     }
 
@@ -1098,7 +1227,10 @@ mod tests {
         let terminals = tree.terminals().collect::<Vec<_>>();
         let (_, edge) = tree.parent(terminals[0]).unwrap();
         let root = tree.root();
-        assert_eq!(Edge::default(), tree.reattach_node(root, edge).unwrap().1);
+        assert_eq!(
+            Edge::new_primary::<String>(None),
+            tree.reattach_node(root, edge).unwrap().1
+        );
         assert_eq!(
             PTBFormat::Simple.tree_to_string(&tree).unwrap(),
             "(ROOT (TERM1 t1) (FIRST (TERM2 t2)) (TERM3 t3) (SECOND (TERM4 t4)) (TERM5 t5))"
@@ -1162,7 +1294,10 @@ mod tests {
             .next()
             .unwrap();
         let (_, edge) = tree.parent(nt).unwrap();
-        assert_eq!(Edge::default(), tree.reattach_node(target, edge).unwrap().1);
+        assert_eq!(
+            Edge::new_primary::<String>(None),
+            tree.reattach_node(target, edge).unwrap().1
+        );
         assert_eq!(
             PTBFormat::Simple.tree_to_string(&tree).unwrap(),
             "(ROOT (FIRST (TERM1 t1) (TERM2 t2) (MOVE (TERM3 t3))) (SECOND (TERM4 t4)) (TERM5 t5))"
@@ -1177,10 +1312,10 @@ mod tests {
         let a_term = graph.add_node(Terminal::new("a", "a_term", 0).into());
         let b_term = graph.add_node(Terminal::new("b", "b_term", 2).into());
         let c_term = graph.add_node(Terminal::new("c", "c_term", 1).into());
-        let a_nt_edge = graph.add_edge(root, a, Edge::default());
-        let c_edge = graph.add_edge(root, c_term, Edge::default());
-        graph.add_edge(a, a_term, Edge::default());
-        let b_edge = graph.add_edge(a, b_term, Edge::default());
+        let a_nt_edge = graph.add_edge(root, a, Edge::new_primary::<String>(None));
+        let c_edge = graph.add_edge(root, c_term, Edge::new_primary::<String>(None));
+        graph.add_edge(a, a_term, Edge::new_primary::<String>(None));
+        let b_edge = graph.add_edge(a, b_term, Edge::new_primary::<String>(None));
         let non_proj = Tree::new_from_parts(graph, 3, root, 1);
         let mut tree = non_proj.clone();
 
@@ -1246,13 +1381,13 @@ mod tests {
         let root_idx = g.add_node(Node::NonTerminal(root));
         let second_idx = g.add_node(Node::NonTerminal(second));
         let term5_idx = g.add_node(Node::Terminal(term5));
-        g.add_edge(root_idx, second_idx, Edge::default());
-        g.add_edge(first_idx, term2_idx, Edge::default());
-        g.add_edge(root_idx, term3_idx, Edge::default());
-        g.add_edge(first_idx, term1_idx, Edge::default());
-        g.add_edge(root_idx, term5_idx, Edge::default());
-        g.add_edge(second_idx, term4_idx, Edge::default());
-        g.add_edge(root_idx, first_idx, Edge::default());
+        g.add_edge(root_idx, second_idx, Edge::new_primary::<String>(None));
+        g.add_edge(first_idx, term2_idx, Edge::new_primary::<String>(None));
+        g.add_edge(root_idx, term3_idx, Edge::new_primary::<String>(None));
+        g.add_edge(first_idx, term1_idx, Edge::new_primary::<String>(None));
+        g.add_edge(root_idx, term5_idx, Edge::new_primary::<String>(None));
+        g.add_edge(second_idx, term4_idx, Edge::new_primary::<String>(None));
+        g.add_edge(root_idx, first_idx, Edge::new_primary::<String>(None));
         let some_tree = some_tree();
         let mut other_tree = Tree::new_from_parts(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
@@ -1265,7 +1400,7 @@ mod tests {
         let other_tree = Tree::new_from_parts(g.clone(), 4, root_idx, 0);
         assert_ne!(some_tree, other_tree);
         let new_t2_idx = g.add_node(Node::Terminal(term2));
-        g.add_edge(first_idx, new_t2_idx, Edge::default());
+        g.add_edge(first_idx, new_t2_idx, Edge::new_primary::<String>(None));
         let other_tree = Tree::new_from_parts(g.clone(), 5, root_idx, 0);
         assert_eq!(some_tree, other_tree);
     }

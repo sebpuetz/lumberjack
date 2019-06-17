@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry, HashMap, VecDeque};
 use std::io::{BufRead, Lines, Write};
 
 use failure::Error;
-use petgraph::prelude::{Direction, NodeIndex, StableGraph};
+use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 use petgraph::visit::{VisitMap, Visitable};
 
 use crate::io::NODE_ANNOTATION_FEATURE_KEY;
@@ -83,6 +83,8 @@ struct Builder {
     sentence_id: String,
     finished_terminals: bool,
     num_non_projective: usize,
+    processed_nts: usize,
+    sec_edges: Vec<(usize, String, NodeIndex)>,
 }
 
 impl Builder {
@@ -117,6 +119,8 @@ impl Builder {
             finished_terminals: false,
             n_terminals: 0,
             num_non_projective: 0,
+            processed_nts: 1,
+            sec_edges: Vec::new(),
         })
     }
 
@@ -140,8 +144,16 @@ impl Builder {
                 eos_id
             ));
         }
-        let root = self.nt_indices.remove(&0).unwrap();
-        if !self.nt_indices.is_empty() {
+        for (source, label, target) in self.sec_edges {
+            self.graph.add_edge(
+                *self.nt_indices.get(&source).unwrap(),
+                target,
+                Edge::Secondary(Some(label)),
+            );
+        }
+
+        let root = *self.nt_indices.get(&0).unwrap();
+        if self.processed_nts != self.nt_indices.len() {
             return Err(format_err!("Did not process all nonterminals."));
         }
         self.graph[root].set_span(Span::new(0, self.n_terminals))?;
@@ -172,15 +184,16 @@ impl Builder {
             return Err(format_err!("Tree without Terminal nodes."));
         }
         self.finished_terminals = true;
+        self.processed_nts += 1;
         // Line is expected to be:
         // #SELF_ID filler label(=annotation) filler edge parent_id
         // possible secondary edges and comments are ignored
         let mut parts = line.split_whitespace();
 
         let self_id = read_required_numerical_field(parts.next().map(|part| &part[1..]))?;
-        let self_idx = self
+        let self_idx = *self
             .nt_indices
-            .remove(&self_id)
+            .get(&self_id)
             .ok_or_else(|| format_err!("Nonterminal without children."))?;
         read_required_string_field(parts.next())?;
 
@@ -195,21 +208,13 @@ impl Builder {
         }
         read_required_string_field(parts.next())?;
 
-        let edge = read_required_string_field(parts.next())?;
-        let edge = if edge == "--" { None } else { Some(edge) };
-
-        let parent_id = read_required_numerical_field(parts.next())?;
-        let parent_idx = match self.nt_indices.entry(parent_id) {
-            Entry::Occupied(v) => *v.get(),
-            Entry::Vacant(v) => *v.insert(self.graph.add_node(NonTerminal::new("", 0).into())),
-        };
-        self.graph.add_edge(parent_idx, self_idx, edge.into());
+        self.process_edges(self_idx, parts)?;
 
         let coverage = self
             .graph
-            .neighbors_directed(self_idx, Direction::Outgoing)
-            .map(|c| self.graph[c].span().into_iter())
-            .flatten()
+            .edges_directed(self_idx, Direction::Outgoing)
+            .filter(|e| e.weight().is_primary())
+            .flat_map(|e| self.graph[e.target()].span().into_iter())
             .collect();
         let span = Span::from_vec(coverage)?;
         if span.skips().is_some() {
@@ -239,10 +244,6 @@ impl Builder {
         let lemma = read_required_string_field(parts.next())?;
         let pos = read_required_string_field(parts.next())?;
         let morph = read_required_string_field(parts.next())?;
-        let edge = read_required_string_field(parts.next())?;
-        let parent_id = read_required_numerical_field(parts.next())?;
-        // unlabeled edges denoted as "--" in tueba
-        let edge = if edge == "--" { None } else { Some(edge) };
         let mut terminal = Terminal::new(form, pos, self.n_terminals);
         if lemma != "--" {
             terminal.set_lemma(Some(lemma));
@@ -251,6 +252,20 @@ impl Builder {
             terminal.features_mut().insert("morph", Some(morph));
         }
         let terminal_idx = self.graph.add_node(terminal.into());
+        self.process_edges(terminal_idx, parts)?;
+        self.n_terminals += 1;
+        Ok(())
+    }
+
+    fn process_edges<'a>(
+        &mut self,
+        node_idx: NodeIndex,
+        mut parts: impl Iterator<Item = &'a str>,
+    ) -> Result<(), Error> {
+        let edge = read_required_string_field(parts.next())?;
+        let parent_id = read_required_numerical_field(parts.next())?;
+        // unlabeled edges denoted as "--" in tueba
+        let edge = if edge == "--" { None } else { Some(edge) };
         let parent_idx = match self.nt_indices.entry(parent_id) {
             Entry::Occupied(v) => *v.get(),
             Entry::Vacant(v) => *v.insert(
@@ -258,9 +273,25 @@ impl Builder {
                     .add_node(NonTerminal::new("", self.n_terminals).into()),
             ),
         };
-        self.n_terminals += 1;
-        self.graph.add_edge(parent_idx, terminal_idx, edge.into());
+        self.graph
+            .add_edge(parent_idx, node_idx, Edge::new_primary(edge));
+        if let Some((label, id)) = Self::parse_optional_fields(parts)? {
+            self.sec_edges.push((id, label.to_string(), node_idx));
+        }
         Ok(())
+    }
+
+    fn parse_optional_fields<'a>(
+        mut parts: impl Iterator<Item = &'a str>,
+    ) -> Result<Option<(&'a str, usize)>, Error> {
+        if let Some(part) = parts.next() {
+            if !part.starts_with('%') {
+                let edge = part;
+                let id = read_required_numerical_field(parts.next())?;
+                return Ok(Some((edge, id)));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -286,8 +317,7 @@ fn read_required_numerical_field(field: Option<&str>) -> Result<usize, Error> {
 /// since last edit and a file ID as well as other comments about the sentence. The metadata is
 /// written as is.
 ///
-/// Since the reader doesn't take secondary edges and comments for nodes into account, this
-/// information is lost in a Negra roundtrip.
+/// If no `sentence_id` is given, the writer numbers the sentences starting at `0`.
 pub struct NegraWriter<W> {
     writer: W,
     counter: usize,
@@ -361,17 +391,19 @@ impl<W> NegraWriter<W> {
     /// Get the Negra String representation for edge and parent ID.
     fn get_parent_edge(idx: NodeIndex, tree: &Tree, id_map: &HashMap<NodeIndex, String>) -> String {
         let (parent, edge) = tree.parent(idx).unwrap();
-        let edge = tree[edge].label().unwrap_or_else(|| "--");
-        if parent == tree.root() {
-            format!("{}{}0", edge, Self::pad(edge.len(), 8))
-        } else {
-            format!(
-                "{}{}{}",
-                edge,
-                Self::pad(edge.len(), 8),
-                id_map.get(&parent).unwrap()
-            )
+        let mut edge_rep = tree[edge].label().unwrap_or_else(|| "--").to_string();
+        edge_rep.push_str(&Self::pad(edge_rep.len(), 8));
+        let id = id_map.get(&parent).unwrap();
+        edge_rep.push_str(id);
+        if let Some((parent, sec_edge)) = tree.secondary_parent(idx) {
+            edge_rep.push_str(&Self::pad(id.len(), 8));
+            let label = tree[sec_edge].label().unwrap_or_else(|| "--");
+            edge_rep.push_str(label);
+            edge_rep.push_str(&Self::pad(label.len(), 8));
+            edge_rep.push_str(id_map.get(&parent).unwrap());
         }
+
+        edge_rep
     }
 }
 
@@ -404,6 +436,7 @@ where
         let mut count = 500;
 
         let mut nt_id_map = HashMap::new();
+        nt_id_map.insert(tree.root(), "0".into());
         let mut queue = VecDeque::new();
 
         // find nonterminals that don't dominate other nonterminals
@@ -560,17 +593,17 @@ mod tests {
         let simpx = g.add_node(NonTerminal::new("SIMPX", Span::new(0, 4)).into());
         let mf = g.add_node(Node::NonTerminal(NonTerminal::new("MF", Span::new(1, 4))));
 
-        g.add_edge(vxfin, v, Edge::from(Some("HD")));
-        g.add_edge(nxorg, d, Edge::from(Some("-NE")));
-        g.add_edge(nxorg, a, Edge::from(Some("HD")));
-        g.add_edge(nx, s, Edge::from(Some("HD")));
-        g.add_edge(mf, nx, Edge::from(Some("OA")));
-        g.add_edge(root, punct, Edge::default());
-        g.add_edge(lk, vxfin, Edge::from(Some("HD")));
-        g.add_edge(simpx, lk, Edge::from(Some("-")));
-        g.add_edge(mf, nxorg, Edge::from(Some("ON")));
-        g.add_edge(simpx, mf, Edge::from(Some("-")));
-        g.add_edge(root, simpx, Edge::default());
+        g.add_edge(vxfin, v, Edge::new_primary(Some("HD")));
+        g.add_edge(nxorg, d, Edge::new_primary(Some("-NE")));
+        g.add_edge(nxorg, a, Edge::new_primary(Some("HD")));
+        g.add_edge(nx, s, Edge::new_primary(Some("HD")));
+        g.add_edge(mf, nx, Edge::new_primary(Some("OA")));
+        g.add_edge(root, punct, Edge::new_primary::<String>(None));
+        g.add_edge(lk, vxfin, Edge::new_primary(Some("HD")));
+        g.add_edge(simpx, lk, Edge::new_primary(Some("-")));
+        g.add_edge(mf, nxorg, Edge::new_primary(Some("ON")));
+        g.add_edge(simpx, mf, Edge::new_primary(Some("-")));
+        g.add_edge(root, simpx, Edge::new_primary::<String>(None));
         assert_eq!(tree, Tree::new_from_parts(g, 5, root, 0));
     }
 

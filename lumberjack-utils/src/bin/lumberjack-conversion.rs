@@ -12,7 +12,7 @@ use failure::Error;
 use stdinout::{Input, OrExit, Output};
 
 use lumberjack::io::{
-    Decode, Encode, PTBFormat, PTBLineFormat, PTBWriter, TryFromConllx, WriteTree,
+    Decode, Encode, NegraWriter, PTBFormat, PTBLineFormat, PTBWriter, TryFromConllx, WriteTree,
 };
 use lumberjack::util::LabelSet;
 use lumberjack::{AnnotatePOS, NegraReader, PTBReader, Projectivize, Tree, TreeOps, UnaryChains};
@@ -40,6 +40,7 @@ fn main() {
 
     let remove_dummies = matches.is_present(REMOVE_DUMMIES);
     let projectivize = matches.is_present(PROJECTIVIZE);
+    let sec_edges = matches.is_present(SEC_EDGES);
     let filter_set = matches.value_of(FILTER_SET).map(get_set_from_file);
     let id_set = matches.value_of(ID_SET).map(get_set_from_file);
     let id_feature_name = matches.value_of(ID_FEATURE_NAME).unwrap();
@@ -62,7 +63,18 @@ fn main() {
         }
 
         if projectivize {
-            tree.projectivize();
+            if let Some(edges) = tree.projectivize() {
+                if sec_edges {
+                    for (parent, edge, child) in edges {
+                        let label = if let Some(label) = edge.label() {
+                            format!("np_{}", label)
+                        } else {
+                            "np".to_string()
+                        };
+                        tree.add_secondary_edge(parent, child, Some(label));
+                    }
+                }
+            }
         }
 
         if let Some(pos_sentences) = pos_sentences.as_mut() {
@@ -173,6 +185,7 @@ impl<'a> TryFrom<&'a str> for InFormat {
 enum OutFormat {
     Absolute,
     Conllx,
+    Negra,
     PTB,
     Relative,
     Simple,
@@ -187,6 +200,7 @@ impl<'a> TryFrom<&'a str> for OutFormat {
         match value.to_lowercase().as_str() {
             "absolute" => Ok(Absolute),
             "conllx" => Ok(Conllx),
+            "negra" => Ok(Negra),
             "ptb" => Ok(PTB),
             "relative" => Ok(Relative),
             "simple" => Ok(Simple),
@@ -238,6 +252,7 @@ where
     use OutFormat::*;
     match out_format {
         Absolute | Conllx | Relative => Box::new(Writer::new(writer)),
+        Negra => Box::new(NegraWriter::new(writer)),
         PTB => Box::new(PTBWriter::new(writer, PTBFormat::PTB)),
         Simple => Box::new(PTBWriter::new(writer, PTBFormat::Simple)),
         TueBa => Box::new(PTBWriter::new(writer, PTBFormat::TueBa)),
@@ -261,6 +276,7 @@ static ID_FEATURE_NAME: &str = "ID_FEATURE_NAME";
 static FILTER_SET: &str = "FILTER_SET";
 static PARENT: &str = "PARENT";
 static PROJECTIVIZE: &str = "PROJECTIVIZE";
+static SEC_EDGES: &str = "SEC_EDGES";
 static REMOVE_DUMMIES: &str = "REMOVE_DUMMIES";
 static REATTACH: &str = "REATTACH";
 static ANNOTATE_POS: &str = "ANNOTATE_POS";
@@ -298,7 +314,9 @@ fn build<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(OUT_FORMAT)
                 .long("output_format")
                 .takes_value(true)
-                .possible_values(&["absolute", "conllx", "ptb", "relative", "simple", "tueba"])
+                .possible_values(&[
+                    "absolute", "conllx", "negra", "ptb", "relative", "simple", "tueba",
+                ])
                 .default_value("simple")
                 .help("Output format:"),
         )
@@ -351,6 +369,15 @@ fn build<'a, 'b>() -> App<'a, 'b> {
             "Projectivize trees before writing. Required for conversions from NEGRA \
              to PTB and CONLLX with encoding.",
         ))
+        .arg(
+            Arg::with_name(SEC_EDGES)
+                .long("sec_edges")
+                .help(
+                    "Annotate projectivized edges as \
+                     secondary edges. This option only has effect for negra as output format.",
+                )
+                .requires(PROJECTIVIZE),
+        )
         .arg(
             Arg::with_name(REATTACH)
                 .long("reattach")

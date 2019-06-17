@@ -263,7 +263,7 @@ impl Decode for Tree {
                             break;
                         }
                     }
-                    graph.add_edge(cur, term_idx, Edge::default());
+                    graph.add_edge(cur, term_idx, Edge::new_primary::<String>(None));
                 }
                 Some(ancestor) => {
                     let (n_common, common_nt) = ancestor.into_parts();
@@ -278,7 +278,7 @@ impl Decode for Tree {
                         if child_idx.is_none() || i > prev_n {
                             let nt = Node::NonTerminal(NonTerminal::new(EMPTY_NODE, idx));
                             let idx = graph.add_node(nt);
-                            graph.add_edge(cur, idx, Edge::default());
+                            graph.add_edge(cur, idx, Edge::new_primary::<String>(None));
                             cur = idx;
                         } else if let Some(node) = child_idx {
                             cur = node;
@@ -297,9 +297,9 @@ impl Decode for Tree {
                     }
 
                     if prev.is_none() || n_common > prev_n {
-                        graph.add_edge(cur, term_idx, Edge::default());
+                        graph.add_edge(cur, term_idx, Edge::new_primary::<String>(None));
                     } else {
-                        graph.add_edge(prev.unwrap(), term_idx, Edge::default());
+                        graph.add_edge(prev.unwrap(), term_idx, Edge::new_primary::<String>(None));
                     }
 
                     prev = Some(cur);

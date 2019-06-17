@@ -3,7 +3,7 @@ use std::io::{BufRead, Lines, Write};
 use failure::Error;
 use pest::iterators::Pair;
 use pest::Parser;
-use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
+use petgraph::prelude::{NodeIndex, StableGraph};
 
 use crate::io::{WriteTree, NODE_ANNOTATION_FEATURE_KEY};
 use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree};
@@ -102,19 +102,14 @@ impl PTBFormat {
         match &sent[position] {
             Node::Terminal(terminal) => self.fmt_term(terminal.form(), terminal.label(), edge),
             Node::NonTerminal(nt) => {
-                let mut nodes: Vec<_> = sent
-                    .edges_directed(position, Direction::Outgoing)
-                    .collect::<Vec<_>>();
-                // sort child nodes by covered span
-                nodes.sort_by(|edge_ref_1, edge_ref_2| {
-                    let span_1 = sentence.graph()[edge_ref_1.target()].span();
-                    let span_2 = sentence.graph()[edge_ref_2.target()].span();
-                    span_1.cmp(&span_2)
+                let mut nodes = sentence.children(position).collect::<Vec<_>>();
+                nodes.sort_by(|(child1, _), (child2, _)| {
+                    sentence[*child1].span().cmp(sentence[*child2].span())
                 });
                 let mut sub_tree_rep = Vec::with_capacity(nodes.len());
                 sub_tree_rep.push(self.fmt_inner(nt, edge));
-                sub_tree_rep.extend(nodes.into_iter().map(|edge_ref| {
-                    self.format_sub_tree(sentence, edge_ref.target(), edge_ref.weight().label())
+                sub_tree_rep.extend(nodes.into_iter().map(|(child, edge)| {
+                    self.format_sub_tree(sentence, child, sentence[edge].label())
                 }));
                 let node_sep = if let PTBFormat::TueBa = self { "" } else { " " };
                 format!("({})", sub_tree_rep.join(node_sep))
@@ -197,14 +192,14 @@ impl PTBFormat {
                 let span = Span::new(lower, upper);
                 g[nt_idx].nonterminal_mut().unwrap().set_span(span.clone());
 
-                Ok((span, nt_idx, edge.into()))
+                Ok((span, nt_idx, Edge::new_primary(edge)))
             }
             Rule::preterminal => {
                 let (edge, pos, form) = self.process_preterminal(pair)?;
                 let term_idx = g.add_node(Node::Terminal(Terminal::new(form, pos, *terminals)));
                 let span = Span::from(*terminals);
                 *terminals += 1;
-                Ok((span, term_idx, edge.into()))
+                Ok((span, term_idx, Edge::new_primary(edge)))
             }
             _ => {
                 eprintln!("{:?}", pair);
@@ -412,15 +407,15 @@ mod tests {
 
         let nt = NonTerminal::new("FIRST", Span::new(0, 2));
         let first = cmp_graph.add_node(Node::NonTerminal(nt));
-        cmp_graph.add_edge(first, term1, Edge::default());
-        cmp_graph.add_edge(first, term2, Edge::default());
+        cmp_graph.add_edge(first, term1, Edge::new_primary::<String>(None));;
+        cmp_graph.add_edge(first, term2, Edge::new_primary::<String>(None));;
 
         let term3 = Terminal::new("t1", "TERM1", 2);
         let term3 = cmp_graph.add_node(Node::Terminal(term3));
 
         let nt2 = NonTerminal::new("SEC", Span::new(2, 3));
         let sec = cmp_graph.add_node(Node::NonTerminal(nt2));
-        cmp_graph.add_edge(sec, term3, Edge::default());
+        cmp_graph.add_edge(sec, term3, Edge::new_primary::<String>(None));
 
         let term4 = Terminal::new("t", "TERM", 3);
         let term4 = cmp_graph.add_node(Node::Terminal(term4));
@@ -428,9 +423,9 @@ mod tests {
         let root = NonTerminal::new("ROOT", Span::new(0, 4));
         let root = cmp_graph.add_node(Node::NonTerminal(root));
 
-        cmp_graph.add_edge(root, first, Edge::default());
-        cmp_graph.add_edge(root, sec, Edge::from(Some("label")));
-        cmp_graph.add_edge(root, term4, Edge::default());
+        cmp_graph.add_edge(root, first, Edge::new_primary::<String>(None));;
+        cmp_graph.add_edge(root, sec, Edge::new_primary(Some("label")));
+        cmp_graph.add_edge(root, term4, Edge::new_primary::<String>(None));
         let tree2 = Tree::new_from_parts(cmp_graph, 4, NodeIndex::new(6), 0);
         let tree = PTBFormat::TueBa.string_to_tree(l).unwrap();
         assert_eq!(tree, tree2);
