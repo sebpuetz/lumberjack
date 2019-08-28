@@ -214,7 +214,7 @@ fn get_reader<'a, R>(
     in_format: InFormat,
     input: BufReader<R>,
     multiline: bool,
-) -> Box<Iterator<Item = Result<Tree, Error>> + 'a>
+) -> Box<dyn Iterator<Item = Result<Tree, Error>> + 'a>
 where
     R: Read + 'a,
 {
@@ -245,7 +245,7 @@ where
     }
 }
 
-fn get_writer<'a, W>(out_format: OutFormat, writer: W) -> Box<WriteTree + 'a>
+fn get_writer<'a, W>(out_format: OutFormat, writer: W) -> Box<dyn WriteTree + 'a>
 where
     W: Write + 'a,
 {

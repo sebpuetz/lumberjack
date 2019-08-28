@@ -373,7 +373,7 @@ impl Tree {
     pub fn siblings<'a>(
         &'a self,
         node: NodeIndex,
-    ) -> Box<Iterator<Item = (NodeIndex, EdgeIndex)> + 'a> {
+    ) -> Box<dyn Iterator<Item = (NodeIndex, EdgeIndex)> + 'a> {
         if let Some((parent, _)) = self.parent(node) {
             Box::new(
                 self.children(parent)
@@ -893,7 +893,7 @@ impl<'a> GraphBase for GraphWrap<'a> {
 impl<'a> GraphRef for GraphWrap<'a> {}
 
 impl<'a> IntoNeighbors for GraphWrap<'a> {
-    type Neighbors = Box<Iterator<Item = NodeIndex> + 'a>;
+    type Neighbors = Box<dyn Iterator<Item = NodeIndex> + 'a>;
     fn neighbors(self, node: NodeIndex) -> Self::Neighbors {
         Box::new(
             self.0
