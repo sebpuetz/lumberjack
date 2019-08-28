@@ -7,6 +7,7 @@ use petgraph::visit::{VisitMap, Visitable};
 
 use crate::io::NODE_ANNOTATION_FEATURE_KEY;
 use crate::{Edge, Node, NonTerminal, Span, Terminal, Tree, WriteTree};
+use itertools::Itertools;
 
 /// Iterator over constituency trees in a Negra export file.
 ///
@@ -275,23 +276,28 @@ impl Builder {
         };
         self.graph
             .add_edge(parent_idx, node_idx, Edge::new_primary(edge));
-        if let Some((label, id)) = Self::parse_optional_fields(parts)? {
-            self.sec_edges.push((id, label.to_string(), node_idx));
-        }
+        self.parse_optional_fields(parts, node_idx)?;
         Ok(())
     }
 
     fn parse_optional_fields<'a>(
+        &mut self,
         mut parts: impl Iterator<Item = &'a str>,
-    ) -> Result<Option<(&'a str, usize)>, Error> {
-        if let Some(part) = parts.next() {
+        node_idx: NodeIndex,
+    ) -> Result<(), Error> {
+        while let Some(part) = parts.next() {
             if !part.starts_with('%') {
-                let edge = part;
                 let id = read_required_numerical_field(parts.next())?;
-                return Ok(Some((edge, id)));
+                self.sec_edges.push((id, part.to_string(), node_idx));
+            } else {
+                let comment = part.trim_start_matches(|c: char| c == '%' || c.is_whitespace());
+                let rest = parts.join(" ");
+                self.graph[node_idx]
+                    .features_mut()
+                    .insert("comment", Some(format!("{} {}", comment, rest)));
             }
         }
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -468,11 +474,15 @@ where
         for terminal_idx in terminals {
             let terminal = tree[terminal_idx].terminal().unwrap();
             write!(self.writer, "{}", Self::terminal_to_negra_line(terminal))?;
-            writeln!(
+            write!(
                 self.writer,
                 "{}",
                 Self::get_parent_edge(terminal_idx, tree, &nt_id_map)
             )?;
+            if let Some(Some(comment)) = terminal.features().and_then(|f| f.get_val("comment")) {
+                write!(self.writer, " %% {}", comment)?;
+            }
+            writeln!(self.writer, "")?;
         }
 
         for nt_idx in nts.into_iter() {
@@ -483,11 +493,15 @@ where
                 "{}",
                 Self::nonterminal_to_negra_line(nt_id, nt)
             )?;
-            writeln!(
+            write!(
                 self.writer,
                 "{}",
                 Self::get_parent_edge(nt_idx, tree, &nt_id_map)
             )?;
+            if let Some(Some(comment)) = nt.features().and_then(|f| f.get_val("comment")) {
+                write!(self.writer, " %% {}", comment)?;
+            }
+            writeln!(self.writer, "")?;
         }
 
         writeln!(self.writer, "#EOS {}\n", sentence_id)?;
@@ -634,7 +648,9 @@ mod tests {
         assert_eq!(builder.graph.node_count(), 3);
         let mut term = Terminal::new("was", "PIS", 0);
         term.set_lemma(Some("etwas"));
-        term.set_features(Some(Features::from("morph:***")));
+        term.set_features(Some(Features::from(
+            "morph:***|comment:some random comment that gets ignored",
+        )));
         assert_eq!(builder.graph[NodeIndex::new(1)], term.into());
 
         assert!(builder
