@@ -10,10 +10,10 @@ repository = "https://github.com/sebpuetz/lumberjack"
 
 
 [dependencies]
-conllx = "0.11"
+conllx = "0.12"
 failure = "0.1"
-fixedbitset = "0.1"
+fixedbitset = "0.2"
 itertools = "0.8"
 pest = "2"
 pest_derive = "2"
-petgraph = "0.4"
+petgraph = "0.5"

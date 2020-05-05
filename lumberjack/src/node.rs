@@ -409,7 +409,7 @@ impl Terminal {
 
     /// Return lemma if present, else `None`.
     pub fn lemma(&self) -> Option<&str> {
-        self.lemma.as_ref().map(String::as_str)
+        self.lemma.as_deref()
     }
 
     /// Replace lemma with `new_lemma`. Return old value.

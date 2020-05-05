@@ -296,10 +296,13 @@ impl Decode for Tree {
                         graph[cur].set_label(common_nt);
                     }
 
-                    if prev.is_none() || n_common > prev_n {
-                        graph.add_edge(cur, term_idx, Edge::new_primary::<String>(None));
-                    } else {
-                        graph.add_edge(prev.unwrap(), term_idx, Edge::new_primary::<String>(None));
+                    match prev {
+                        Some(prev) if n_common <= prev_n => {
+                            graph.add_edge(prev, term_idx, Edge::new_primary::<String>(None));
+                        }
+                        _ => {
+                            graph.add_edge(cur, term_idx, Edge::new_primary::<String>(None));
+                        }
                     }
 
                     prev = Some(cur);

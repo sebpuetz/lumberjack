@@ -52,7 +52,7 @@ impl TryFromConllx for Tree {
         for (idx, token) in sentence.iter().filter_map(Node::token).enumerate() {
             let ancestor = token
                 .features()
-                .and_then(|f| f.as_map().get("abs_ancestor"))
+                .and_then(|f| f.get("abs_ancestor"))
                 .ok_or_else(|| format_err!("Missing ancestor feature."))?
                 .as_ref()
                 .map(String::as_str)
@@ -88,7 +88,7 @@ impl TryFromConllx for Tree {
         for (idx, token) in sentence.iter().filter_map(Node::token).enumerate() {
             let ancestor = token
                 .features()
-                .and_then(|f| f.as_map().get("rel_ancestor"))
+                .and_then(|f| f.get("rel_ancestor"))
                 .ok_or_else(|| format_err!("Missing ancestor feature."))?
                 .as_ref()
                 .map(String::as_str)
@@ -135,7 +135,7 @@ impl<'a> From<&'a Terminal> for Token {
         token.set_lemma(terminal.lemma());
         token.set_pos(Some(terminal.label()));
         if let Some(features) = terminal.features() {
-            token.set_features(Some(Features::from_string(features.to_string())));
+            token.set_features(Some(Features::from(features.inner().to_owned())));
         }
         token
     }
@@ -155,7 +155,7 @@ impl From<Tree> for Sentence {
             token.set_lemma(lemma);
             token.set_pos(Some(terminal.set_label(String::new())));
             if let Some(morph) = terminal.set_features(None) {
-                token.set_features(Some(Features::from_string(morph.to_string())));
+                token.set_features(Some(Features::from(morph.inner().to_owned())));
             }
             tokens.push((token, terminal.span().start));
         }
@@ -204,7 +204,7 @@ mod tests {
         target.push(
             TokenBuilder::new("Nounphrase")
                 .pos("NN")
-                .features(Features::from_string("feature|key:val"))
+                .features(Features::from("feature|key:val"))
                 .into(),
         );
         target.push(TokenBuilder::new("on").pos("PP").into());
@@ -230,7 +230,7 @@ mod tests {
                 TokenBuilder::new("e")
                     .lemma("e")
                     .pos("ART")
-                    .features(Features::from_string("morph:gsf"))
+                    .features(Features::from("morph:gsf"))
             ),
             conll_sentence[6].token().unwrap()
         );
@@ -248,7 +248,7 @@ mod tests {
                 TokenBuilder::new("e")
                     .lemma("e")
                     .pos("ART")
-                    .features(Features::from_string("morph:gsf"))
+                    .features(Features::from("morph:gsf"))
             ),
             conll_sentence[6].token().unwrap()
         );
@@ -268,7 +268,7 @@ mod tests {
         target.push(
             TokenBuilder::new("Nounphrase")
                 .pos("NN")
-                .features(Features::from_string("feature|key:val"))
+                .features(Features::from("feature|key:val"))
                 .into(),
         );
         target.push(TokenBuilder::new("on").pos("PP").into());

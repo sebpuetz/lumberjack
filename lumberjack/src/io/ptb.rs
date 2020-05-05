@@ -313,7 +313,7 @@ where
                 let (line_open, line_closed) = count_pars(&line);
                 open += line_open;
                 open -= line_closed;
-                buffer.push_str(line.as_str());;
+                buffer.push_str(line.as_str());
                 if open == 0 {
                     return Some(self.format.string_to_tree(&buffer));
                 }
@@ -407,8 +407,8 @@ mod tests {
 
         let nt = NonTerminal::new("FIRST", Span::new(0, 2));
         let first = cmp_graph.add_node(Node::NonTerminal(nt));
-        cmp_graph.add_edge(first, term1, Edge::new_primary::<String>(None));;
-        cmp_graph.add_edge(first, term2, Edge::new_primary::<String>(None));;
+        cmp_graph.add_edge(first, term1, Edge::new_primary::<String>(None));
+        cmp_graph.add_edge(first, term2, Edge::new_primary::<String>(None));
 
         let term3 = Terminal::new("t1", "TERM1", 2);
         let term3 = cmp_graph.add_node(Node::Terminal(term3));
@@ -423,7 +423,7 @@ mod tests {
         let root = NonTerminal::new("ROOT", Span::new(0, 4));
         let root = cmp_graph.add_node(Node::NonTerminal(root));
 
-        cmp_graph.add_edge(root, first, Edge::new_primary::<String>(None));;
+        cmp_graph.add_edge(root, first, Edge::new_primary::<String>(None));
         cmp_graph.add_edge(root, sec, Edge::new_primary(Some("label")));
         cmp_graph.add_edge(root, term4, Edge::new_primary::<String>(None));
         let tree2 = Tree::new_from_parts(cmp_graph, 4, NodeIndex::new(6), 0);

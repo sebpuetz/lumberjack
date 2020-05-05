@@ -2,6 +2,7 @@ use std::collections::{hash_map::Entry, HashMap, VecDeque};
 use std::io::{BufRead, Lines, Write};
 
 use failure::Error;
+use itertools::Itertools;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex, StableGraph};
 use petgraph::visit::{VisitMap, Visitable};
 
@@ -275,24 +276,51 @@ impl Builder {
         };
         self.graph
             .add_edge(parent_idx, node_idx, Edge::new_primary(edge));
-        if let Some((label, id)) = Self::parse_optional_fields(parts)? {
-            self.sec_edges.push((id, label.to_string(), node_idx));
+        match Self::parse_optional_fields(&mut parts)? {
+            OptionalLinePart::SecEdge((label, id)) => {
+                self.sec_edges.push((id, label.to_string(), node_idx));
+                if let OptionalLinePart::Comment(comment) = Self::parse_optional_fields(&mut parts)?
+                {
+                    self.graph[node_idx]
+                        .features_mut()
+                        .insert("comment", Some(comment));
+                }
+            }
+            OptionalLinePart::Comment(comment) => {
+                self.graph[node_idx]
+                    .features_mut()
+                    .insert("comment", Some(comment));
+            }
+            OptionalLinePart::None => {}
         }
         Ok(())
     }
 
     fn parse_optional_fields<'a>(
         mut parts: impl Iterator<Item = &'a str>,
-    ) -> Result<Option<(&'a str, usize)>, Error> {
+    ) -> Result<OptionalLinePart<'a>, Error> {
         if let Some(part) = parts.next() {
             if !part.starts_with('%') {
                 let edge = part;
                 let id = read_required_numerical_field(parts.next())?;
-                return Ok(Some((edge, id)));
+                Ok(OptionalLinePart::SecEdge((edge, id)))
+            } else {
+                Ok(OptionalLinePart::Comment(format!(
+                    "{} {}",
+                    part,
+                    parts.join(" ")
+                )))
             }
+        } else {
+            Ok(OptionalLinePart::None)
         }
-        Ok(None)
     }
+}
+
+enum OptionalLinePart<'a> {
+    Comment(String),
+    SecEdge((&'a str, usize)),
+    None,
 }
 
 fn read_required_string_field(field: Option<&str>) -> Result<&str, Error> {
@@ -330,11 +358,12 @@ impl<W> NegraWriter<W> {
     }
 
     /// Return a string with spaces as padding.
-    fn pad(len: usize, to: usize) -> String {
-        if len >= to + 8 {
+    fn pad(item: &str, to: usize) -> String {
+        let len = item.chars().count();
+        if len >= to {
             " ".to_string()
-        } else if len < to + 8 {
-            (len..to + 8).map(|_| " ").collect()
+        } else if len < to {
+            (len..to).map(|_| " ").collect()
         } else {
             (len..to).map(|_| " ").collect()
         }
@@ -346,19 +375,19 @@ impl<W> NegraWriter<W> {
     fn terminal_to_negra_line(terminal: &Terminal) -> String {
         let mut string_rep = String::with_capacity(84);
         string_rep.push_str(terminal.form());
-        string_rep.push_str(&Self::pad(terminal.form().len(), 24));
+        string_rep.push_str(&Self::pad(terminal.form(), 24));
         let lemma = terminal.lemma().unwrap_or_else(|| "--");
         string_rep.push_str(lemma);
-        string_rep.push_str(&Self::pad(lemma.len(), 24));
+        string_rep.push_str(&Self::pad(lemma, 24));
         string_rep.push_str(terminal.label());
-        string_rep.push_str(&Self::pad(terminal.label().len(), 8));
+        string_rep.push_str(&Self::pad(terminal.label(), 8));
         let features = terminal.features();
         if let Some(Some(morph)) = features.and_then(|f| f.get_val("morph")) {
             string_rep.push_str(morph);
-            string_rep.push_str(&Self::pad(morph.len(), 16));
+            string_rep.push_str(&Self::pad(morph, 16));
         } else {
             string_rep.push_str("--");
-            string_rep.push_str(&Self::pad(2, 16));
+            string_rep.push_str(&Self::pad("--", 16));
         }
         string_rep
     }
@@ -370,9 +399,9 @@ impl<W> NegraWriter<W> {
         let mut nt_rep = String::with_capacity(84);
         nt_rep.push('#');
         nt_rep.push_str(&id);
-        nt_rep.push_str(&Self::pad(id.len() + 1, 24));
+        nt_rep.push_str(&Self::pad("#500", 24));
         nt_rep.push_str("--");
-        nt_rep.push_str(&Self::pad(2, 24));
+        nt_rep.push_str(&Self::pad("--", 24));
         let mut label = nt.label().to_string();
         if let Some(Some(annotation)) = nt
             .features()
@@ -382,9 +411,9 @@ impl<W> NegraWriter<W> {
             label.push_str(annotation);
         }
         nt_rep.push_str(&label);
-        nt_rep.push_str(&Self::pad(label.len(), 8));
+        nt_rep.push_str(&Self::pad(&label, 8));
         nt_rep.push_str("--");
-        nt_rep.push_str(&Self::pad(2, 16));
+        nt_rep.push_str(&Self::pad("--", 16));
         nt_rep
     }
 
@@ -392,14 +421,14 @@ impl<W> NegraWriter<W> {
     fn get_parent_edge(idx: NodeIndex, tree: &Tree, id_map: &HashMap<NodeIndex, String>) -> String {
         let (parent, edge) = tree.parent(idx).unwrap();
         let mut edge_rep = tree[edge].label().unwrap_or_else(|| "--").to_string();
-        edge_rep.push_str(&Self::pad(edge_rep.len(), 8));
+        edge_rep.push_str(&Self::pad(&edge_rep, 8));
         let id = id_map.get(&parent).unwrap();
         edge_rep.push_str(id);
         if let Some((parent, sec_edge)) = tree.secondary_parent(idx) {
-            edge_rep.push_str(&Self::pad(id.len(), 8));
+            edge_rep.push_str(&Self::pad(id, 8));
             let label = tree[sec_edge].label().unwrap_or_else(|| "--");
             edge_rep.push_str(label);
-            edge_rep.push_str(&Self::pad(label.len(), 8));
+            edge_rep.push_str(&Self::pad(label, 8));
             edge_rep.push_str(id_map.get(&parent).unwrap());
         }
 
@@ -468,11 +497,16 @@ where
         for terminal_idx in terminals {
             let terminal = tree[terminal_idx].terminal().unwrap();
             write!(self.writer, "{}", Self::terminal_to_negra_line(terminal))?;
-            writeln!(
+            write!(
                 self.writer,
                 "{}",
                 Self::get_parent_edge(terminal_idx, tree, &nt_id_map)
             )?;
+            if let Some(Some(comment)) = terminal.features().and_then(|f| f.get_val("comment")) {
+                writeln!(self.writer, "     {}", comment)?;
+            } else {
+                writeln!(self.writer)?;
+            }
         }
 
         for nt_idx in nts.into_iter() {
@@ -483,14 +517,19 @@ where
                 "{}",
                 Self::nonterminal_to_negra_line(nt_id, nt)
             )?;
-            writeln!(
+            write!(
                 self.writer,
                 "{}",
                 Self::get_parent_edge(nt_idx, tree, &nt_id_map)
             )?;
+            if let Some(Some(comment)) = nt.features().and_then(|f| f.get_val("comment")) {
+                writeln!(self.writer, " {}", comment)?;
+            } else {
+                writeln!(self.writer)?;
+            }
         }
 
-        writeln!(self.writer, "#EOS {}\n", sentence_id)?;
+        writeln!(self.writer, "#EOS {}", sentence_id)?;
 
         Ok(())
     }
@@ -629,12 +668,14 @@ mod tests {
     #[test]
     fn terminal() {
         let mut builder = Builder::from_header("#BOS 0").unwrap();
-        let term = "was etwas   PIS *** HD  502 %some random comment that gets ignored\n";
+        let term = "was etwas   PIS *** HD  502 % some random comment that doesnt get ignored\n";
         builder.process_line(term).unwrap();
         assert_eq!(builder.graph.node_count(), 3);
         let mut term = Terminal::new("was", "PIS", 0);
         term.set_lemma(Some("etwas"));
-        term.set_features(Some(Features::from("morph:***")));
+        term.set_features(Some(Features::from(
+            "morph:***|comment:% some random comment that doesnt get ignored",
+        )));
         assert_eq!(builder.graph[NodeIndex::new(1)], term.into());
 
         assert!(builder
